@@ -7,7 +7,7 @@ const Allocator = std.mem.Allocator;
 const testing = std.testing;
 const test_alloc = testing.allocator;
 
-const macro_regex = mvzr.compile("DEF:\\w+:\\w+") orelse unreachable;
+const macro_regex = mvzr.compile("DEF:\\w+:([^:s])+:") orelse unreachable;
 
 const Replace = struct {
     start: usize,
