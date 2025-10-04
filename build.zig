@@ -20,6 +20,8 @@ pub fn build(b: *std.Build) void {
     // of this build script using `b.option()`. All defined flags (including
     // target and optimize options) will be listed when running `zig build --help`
     // in this directory.
+    const regex_d = b.dependency("mvzr", .{});
+    const mvzr_mod = regex_d.module("mvzr");
 
     // This creates a module, which represents a collection of source files alongside
     // some compilation options, such as optimization mode and linked system libraries.
@@ -39,6 +41,12 @@ pub fn build(b: *std.Build) void {
         // Later on we'll use this module as the root module of a test executable
         // which requires us to specify a target.
         .target = target,
+        .imports = &.{
+            .{
+                .name = "mvzr",
+                .module = mvzr_mod,
+            },
+        },
     });
 
     // Here we define an executable. An executable needs to have a root module

@@ -1,23 +1,122 @@
 //! By convention, root.zig is the root source file when making a library.
 const std = @import("std");
+pub const mvzr = @import("mvzr");
 
-pub fn bufferedPrint() !void {
-    // Stdout is for the actual output of your application, for example if you
-    // are implementing gzip, then only the compressed bytes should be sent to
-    // stdout, not any debugging messages.
-    var stdout_buffer: [1024]u8 = undefined;
-    var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
-    const stdout = &stdout_writer.interface;
+const debug = std.debug;
+const Allocator = std.mem.Allocator;
+const testing = std.testing;
+const test_alloc = testing.allocator;
 
-    try stdout.print("Run `zig build test` to run the tests.\n", .{});
+const macro_regex = mvzr.compile("DEF:\\w+:\\w+") orelse unreachable;
 
-    try stdout.flush(); // Don't forget to flush!
+const Replace = struct {
+    start: usize,
+    end: usize,
+    new_str: []const u8,
+};
+
+fn replacePQOrderByStart(ctx: void, a: Replace, b: Replace) std.math.Order {
+    _ = ctx;
+    return std.math.order(a.start, b.start);
+}
+const ReplacePQ = std.PriorityQueue(Replace, void, replacePQOrderByStart);
+
+pub fn preprocessor(alloc: Allocator, input: []const u8) ![]u8 {
+    var iter = macro_regex.iterator(input);
+    var map = std.StringHashMap([]const u8).init(alloc);
+    var replace_list = ReplacePQ.init(alloc, {});
+    defer replace_list.clearAndFree();
+
+    defer map.clearAndFree();
+
+    while (iter.next()) |match| {
+        std.debug.print("match: {s}\n", .{match.slice});
+        var macro_iter = std.mem.tokenizeAny(u8, match.slice, ":");
+        // skip "DEF"
+        _ = macro_iter.next();
+        const macro_name = macro_iter.next() orelse return error.BAD_MACRO_NAME;
+        const macro_value = macro_iter.next() orelse return error.BAD_MACRO_VALUE;
+        try map.put(macro_name, macro_value);
+        try replace_list.add(.{ .start = match.start, .end = match.end, .new_str = "" });
+    }
+    dumpMacroMap(map);
+
+    var i = map.iterator();
+    while (i.next()) |entry| {
+        const replace_value = entry.value_ptr.*;
+        const expression = try std.mem.concat(alloc, u8, &.{ "\\$", entry.key_ptr.* });
+        defer alloc.free(expression);
+
+        const match_regex = mvzr.compile(expression) orelse return error.FailToCompileEXP;
+        var it = match_regex.iterator(input);
+        while (it.next()) |match| {
+            try replace_list.add(.{ .start = match.start, .end = match.end, .new_str = replace_value });
+        }
+    }
+
+    const len_diff = calculateDifference(&replace_list);
+    std.debug.print("len diff: {d}", .{len_diff});
+    const result_len = @as(isize, @intCast(input.len)) + len_diff;
+    const result = try alloc.alloc(u8, @intCast(result_len));
+    if (replace_list.items.len == 0) {
+        std.debug.assert(result.len == input.len);
+        @memcpy(result, input);
+        return result;
+    }
+
+    var out: usize = 0;
+    var in: usize = 0;
+    while (replace_list.removeOrNull()) |replace| {
+        std.debug.print("out: {d} in: {d}\n", .{ out, in });
+        std.debug.print("{any}\n", .{replace});
+        const bytes_2_copy = replace.start - in;
+
+        // Copy all the bytes before the replace
+        @memcpy(result[out .. out + bytes_2_copy], input[in .. in + bytes_2_copy]);
+        out += bytes_2_copy;
+        in += bytes_2_copy;
+        //Copy the bytes that need the replace
+        in += replace.end - replace.start;
+        const l = replace.new_str.len;
+        @memcpy(result[out .. out + l], replace.new_str);
+        out += l;
+    }
+    //Copy all leftover bytes after the last replace
+    const left_over_bytes = input.len - in;
+    if (left_over_bytes > result.len - out) {
+        return error.NotEnoughSpaceInResult;
+    }
+    @memcpy(result[out .. out + left_over_bytes], input[in .. in + left_over_bytes]);
+    return result;
 }
 
-pub fn add(a: i32, b: i32) i32 {
-    return a + b;
+fn calculateDifference(replace_list: *const ReplacePQ) isize {
+    var diff: isize = 0;
+    for (replace_list.items) |r| {
+        diff -= @intCast(r.end - r.start);
+        diff += @intCast(r.new_str.len);
+    }
+    return diff;
 }
 
-test "basic add functionality" {
-    try std.testing.expect(add(3, 7) == 10);
+test "preprocessor" {
+    const input_file = @embedFile("./test_files/macros_1.txt");
+    const processed = try preprocessor(test_alloc, input_file);
+    defer test_alloc.free(processed);
+    std.debug.print("---------\n{s}\n---------", .{processed});
+}
+
+test "preprocessor no macros" {
+    const input_file = @embedFile("./test_files/prerocessor_no_macros.txt");
+    const processed = try preprocessor(test_alloc, input_file);
+    defer test_alloc.free(processed);
+
+    try testing.expectEqualStrings(input_file, processed);
+}
+
+fn dumpMacroMap(map: std.StringHashMap([]const u8)) void {
+    var iter = map.iterator();
+    while (iter.next()) |entry| {
+        std.debug.print("{s} = {s}\n", .{ entry.key_ptr.*, entry.value_ptr.* });
+    }
 }

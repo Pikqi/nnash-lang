@@ -1,0 +1,5 @@
+DEF:I_AM_A_MACRO:makron DEF:ME_2:2
+
+there are $ME_2 $I_AM_A_MACROs here
+
+And some more text here
