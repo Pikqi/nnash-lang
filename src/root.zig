@@ -95,7 +95,12 @@ pub fn preprocessor(alloc: Allocator, input: []const u8, opts: PreprocessorOpts)
         return error.NotEnoughSpaceInResult;
     }
     @memcpy(result[out .. out + left_over_bytes], input[in .. in + left_over_bytes]);
-    return result[0..];
+    out += left_over_bytes;
+    if (result_len != out) {
+        std.log.warn("Result buffer not fully written. out:{d}, result_len:{d}", .{ out, result_len });
+    }
+
+    return result;
 }
 
 fn calculateDifference(replace_list: *const ReplacePQ) isize {
@@ -110,10 +115,12 @@ fn calculateDifference(replace_list: *const ReplacePQ) isize {
 test "preprocessor" {
     const input_file = @embedFile("./test_files/preprocessor/macros_1.txt");
     const sol_file = @embedFile("./test_files/preprocessor/macros1_sol.txt");
+    const sol_slice = sol_file[0 .. sol_file.len - 1];
+    @breakpoint();
     const processed = try preprocessor(test_alloc, input_file, .{ .trim = true });
     defer test_alloc.free(processed);
 
-    try testing.expectEqualStrings(sol_file[0..processed.len], processed);
+    try testing.expectEqualStrings(sol_slice, processed);
 }
 
 test "preprocessor no macros" {
