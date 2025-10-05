@@ -8,6 +8,7 @@ const testing = std.testing;
 const test_alloc = testing.allocator;
 
 const macro_regex = mvzr.compile("DEF:\\w+:([^:s])+:") orelse unreachable;
+const trim_regex = mvzr.compile("[\n\r]+") orelse unreachable;
 
 const Replace = struct {
     start: usize,
@@ -21,7 +22,11 @@ fn replacePQOrderByStart(ctx: void, a: Replace, b: Replace) std.math.Order {
 }
 const ReplacePQ = std.PriorityQueue(Replace, void, replacePQOrderByStart);
 
-pub fn preprocessor(alloc: Allocator, input: []const u8) ![]u8 {
+const PreprocessorOpts = struct {
+    trim: bool = true,
+};
+
+pub fn preprocessor(alloc: Allocator, input: []const u8, opts: PreprocessorOpts) ![]u8 {
     var iter = macro_regex.iterator(input);
     var map = std.StringHashMap([]const u8).init(alloc);
     var replace_list = ReplacePQ.init(alloc, {});
@@ -30,7 +35,6 @@ pub fn preprocessor(alloc: Allocator, input: []const u8) ![]u8 {
     defer map.clearAndFree();
 
     while (iter.next()) |match| {
-        std.debug.print("match: {s}\n", .{match.slice});
         var macro_iter = std.mem.tokenizeAny(u8, match.slice, ":");
         // skip "DEF"
         _ = macro_iter.next();
@@ -39,10 +43,17 @@ pub fn preprocessor(alloc: Allocator, input: []const u8) ![]u8 {
         try map.put(macro_name, macro_value);
         try replace_list.add(.{ .start = match.start, .end = match.end, .new_str = "" });
     }
-    dumpMacroMap(map);
+    if (opts.trim) {
+        var trim_iter = trim_regex.iterator(input);
 
-    var i = map.iterator();
-    while (i.next()) |entry| {
+        while (trim_iter.next()) |match| {
+            try replace_list.add(.{ .start = match.start, .end = match.end, .new_str = "" });
+        }
+    }
+    // dumpMacroMap(map);
+
+    var map_iter = map.iterator();
+    while (map_iter.next()) |entry| {
         const replace_value = entry.value_ptr.*;
         const expression = try std.mem.concat(alloc, u8, &.{ "\\$", entry.key_ptr.* });
         defer alloc.free(expression);
@@ -55,7 +66,6 @@ pub fn preprocessor(alloc: Allocator, input: []const u8) ![]u8 {
     }
 
     const len_diff = calculateDifference(&replace_list);
-    std.debug.print("len diff: {d}", .{len_diff});
     const result_len = @as(isize, @intCast(input.len)) + len_diff;
     const result = try alloc.alloc(u8, @intCast(result_len));
     if (replace_list.items.len == 0) {
@@ -67,8 +77,6 @@ pub fn preprocessor(alloc: Allocator, input: []const u8) ![]u8 {
     var out: usize = 0;
     var in: usize = 0;
     while (replace_list.removeOrNull()) |replace| {
-        std.debug.print("out: {d} in: {d}\n", .{ out, in });
-        std.debug.print("{any}\n", .{replace});
         const bytes_2_copy = replace.start - in;
 
         // Copy all the bytes before the replace
@@ -87,7 +95,7 @@ pub fn preprocessor(alloc: Allocator, input: []const u8) ![]u8 {
         return error.NotEnoughSpaceInResult;
     }
     @memcpy(result[out .. out + left_over_bytes], input[in .. in + left_over_bytes]);
-    return result;
+    return result[0..];
 }
 
 fn calculateDifference(replace_list: *const ReplacePQ) isize {
@@ -100,15 +108,17 @@ fn calculateDifference(replace_list: *const ReplacePQ) isize {
 }
 
 test "preprocessor" {
-    const input_file = @embedFile("./test_files/macros_1.txt");
-    const processed = try preprocessor(test_alloc, input_file);
+    const input_file = @embedFile("./test_files/preprocessor/macros_1.txt");
+    const sol_file = @embedFile("./test_files/preprocessor/macros1_sol.txt");
+    const processed = try preprocessor(test_alloc, input_file, .{ .trim = true });
     defer test_alloc.free(processed);
-    std.debug.print("---------\n{s}\n---------", .{processed});
+
+    try testing.expectEqualStrings(sol_file[0..processed.len], processed);
 }
 
 test "preprocessor no macros" {
-    const input_file = @embedFile("./test_files/prerocessor_no_macros.txt");
-    const processed = try preprocessor(test_alloc, input_file);
+    const input_file = @embedFile("./test_files/preprocessor/no_macros.txt");
+    const processed = try preprocessor(test_alloc, input_file, .{ .trim = false });
     defer test_alloc.free(processed);
 
     try testing.expectEqualStrings(input_file, processed);
