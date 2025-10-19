@@ -6,6 +6,7 @@ const isAlphabetic = std.ascii.isAlphabetic;
 
 const LexerError = error{
     CharacterInIntLiteral,
+    UnkownToken,
 };
 
 const TokenType = enum {
@@ -39,12 +40,14 @@ const TokenType = enum {
     INT,
     FLOAT,
     STRING,
+    BOOL,
     //Literals
     INT_LIT,
     FLOAT_LIT,
     STRING_LIT,
     VOID_LIT, //maybe?
     // misc
+    IDENTIFIER,
     STATMENT_END,
     COMMA,
     COLON,
@@ -53,8 +56,11 @@ const TokenType = enum {
     PIPE,
     EOF,
 };
-fn isIdentifierStart(char: u8) bool {
-    return std.ascii.isAlphabetic(char) or char == '_';
+fn isIdentifierStart(c: u8) bool {
+    return std.ascii.isAlphabetic(c) or c == '_';
+}
+fn isIdentifierPart(c: u8) bool {
+    return isIdentifierStart(c) or isDigit(c);
 }
 
 // todo keywords map
@@ -126,24 +132,20 @@ pub const Lexer = struct {
             '[' => try self.add(if (self.sc.match('[')) .LBRACKET_DOUBLE else .LBRACKET),
             ']' => try self.add(if (self.sc.match(']')) .RBRACKET_DOUBLE else .RBRACKET),
             '!' => try self.add(if (self.sc.match('=')) .NEQ else .STATMENT_END),
+            // todo add @ buiiltin
             else => {
                 if (isDigit(c)) {
                     try self.number();
-                    // } else if (isIdentifierStart(c)) {}
+                } else if (isIdentifierStart(c)) {
+                    try self.indentifierOrKeyword();
                 } else {
-                    return error.UnkownLex;
+                    return LexerError.UnkownToken;
                 }
             },
         }
     }
     fn add(self: *Lexer, t: TokenType) !void {
         const lex = self.getLexemFromType(t);
-        try self.lexems.append(self.allocator, lex);
-    }
-
-    fn addString(self: *Lexer, t: TokenType, str: []const u8) !void {
-        var lex = self.getLexemFromType(t);
-        lex.str = str;
         try self.lexems.append(self.allocator, lex);
     }
 
@@ -170,19 +172,30 @@ pub const Lexer = struct {
         try self.addLiteralInt(text);
     }
 
-    pub fn identifier(self: *Lexer) !void {
-        _ = self; // autofix
-    }
-
     pub fn indentifierOrKeyword(self: *Lexer) !void {
-        _ = self; // autofix
+        while (!self.sc.isAtEnd() and isIdentifierPart(self.sc.peek().?)) {
+            _ = self.sc.advance();
+        }
+        const text = self.sc.source[self.sc.token_start..self.sc.curr];
+        const k = keywords.get(text);
+        if (k) |keyword| {
+            try self.add(keyword);
+        } else {
+            try self.addIdentifier(text);
+        }
     }
 
-    pub fn addLiteralInt(self: *Lexer, str: []const u8) !void {
+    fn addLiteralInt(self: *Lexer, str: []const u8) !void {
         const parsed = try std.fmt.parseInt(u64, str, 10);
         var lexem = self.getLexemFromType(.INT_LIT);
         lexem.str = str;
         lexem.value = parsed;
+        try self.lexems.append(self.allocator, lexem);
+    }
+
+    fn addIdentifier(self: *Lexer, str: []const u8) !void {
+        var lexem = self.getLexemFromType(.IDENTIFIER);
+        lexem.str = str;
         try self.lexems.append(self.allocator, lexem);
     }
 
@@ -192,6 +205,17 @@ pub const Lexer = struct {
         self.* = undefined;
     }
 };
+
+const keywords = std.static_string_map.StaticStringMap(TokenType).initComptime(&.{
+    .{ "while", TokenType.WHILE },
+    .{ "elihw", TokenType.ENDWHILE },
+    .{ "fun", TokenType.FUN_DEC },
+    .{ "nuf", TokenType.END_FUN_DEC },
+    .{ "int", TokenType.INT },
+    .{ "string", TokenType.STRING },
+    .{ "boole", TokenType.BOOL },
+    .{ "float", TokenType.FLOAT },
+});
 
 pub const ScannerCore = struct {
     source: []const u8,
@@ -299,6 +323,21 @@ test "Lexer bad number" {
     const input = "10 20bcd";
     var lexer = try Lexer.init(input, std.testing.allocator);
     try std.testing.expectError(LexerError.CharacterInIntLiteral, lexer.scanTokens());
+
+    defer lexer.deinit();
+}
+
+test "Lexer keywords" {
+    const input = "while elihw fun nuf int string boole float i_am_not_a_keyword";
+    const expected_lexem_types = [_]TokenType{ .WHILE, .ENDWHILE, .FUN_DEC, .END_FUN_DEC, .INT, .STRING, .BOOL, .FLOAT, .IDENTIFIER };
+    var lexer = try Lexer.init(input, std.testing.allocator);
+    try lexer.scanTokens();
+    try std.testing.expectEqual(expected_lexem_types.len, lexer.lexems.items.len);
+
+    for (lexer.lexems.items, expected_lexem_types) |my_lexem, expected_lexem| {
+        try std.testing.expectEqual(expected_lexem, my_lexem.type);
+    }
+    try std.testing.expectEqualStrings("i_am_not_a_keyword", lexer.lexems.getLast().str.?);
 
     defer lexer.deinit();
 }
