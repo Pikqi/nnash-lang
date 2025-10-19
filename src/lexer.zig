@@ -4,6 +4,10 @@ const Allocator = std.mem.Allocator;
 const isDigit = std.ascii.isDigit;
 const isAlphabetic = std.ascii.isAlphabetic;
 
+const LexerError = error{
+    CharacterInIntLiteral,
+};
+
 const TokenType = enum {
     // Arithmetic
     ADD,
@@ -49,6 +53,9 @@ const TokenType = enum {
     PIPE,
     EOF,
 };
+fn isIdentifierStart(char: u8) bool {
+    return std.ascii.isAlphabetic(char) or char == '_';
+}
 
 // todo keywords map
 const Lexem = struct {
@@ -57,6 +64,7 @@ const Lexem = struct {
     line: u64 = 0,
     col_start: u64 = 0,
     col_end: u64 = 0,
+    value: ?u64 = 0,
 };
 
 pub const Lexer = struct {
@@ -119,7 +127,12 @@ pub const Lexer = struct {
             ']' => try self.add(if (self.sc.match(']')) .RBRACKET_DOUBLE else .RBRACKET),
             '!' => try self.add(if (self.sc.match('=')) .NEQ else .STATMENT_END),
             else => {
-                return error.NotKnown;
+                if (isDigit(c)) {
+                    try self.number();
+                    // } else if (isIdentifierStart(c)) {}
+                } else {
+                    return error.UnkownLex;
+                }
             },
         }
     }
@@ -143,16 +156,39 @@ pub const Lexer = struct {
         };
     }
 
-    // Parsira broj, puca ako se broj ne zavrsava sa whitespace
     pub fn number(self: *Lexer) !void {
+        while (!self.sc.isAtEnd() and isDigit(self.sc.peek().?)) {
+            _ = self.sc.advance();
+        }
+        const text = self.sc.source[self.sc.token_start..self.sc.curr];
+        const next_char = self.sc.peek();
+        if (next_char) |next| {
+            if (isAlphabetic(next)) {
+                return LexerError.CharacterInIntLiteral;
+            }
+        }
+        try self.addLiteralInt(text);
+    }
+
+    pub fn identifier(self: *Lexer) !void {
         _ = self; // autofix
     }
 
     pub fn indentifierOrKeyword(self: *Lexer) !void {
         _ = self; // autofix
     }
+
+    pub fn addLiteralInt(self: *Lexer, str: []const u8) !void {
+        const parsed = try std.fmt.parseInt(u64, str, 10);
+        var lexem = self.getLexemFromType(.INT_LIT);
+        lexem.str = str;
+        lexem.value = parsed;
+        try self.lexems.append(self.allocator, lexem);
+    }
+
     pub fn deinit(self: *Lexer) void {
         self.lexems.clearAndFree(self.allocator);
+        self.lexems.deinit(self.allocator);
         self.* = undefined;
     }
 };
@@ -233,8 +269,8 @@ pub const ScannerCore = struct {
 
 // ********** Lexer tests **********
 test "Lexer simple lexems only" {
-    const input = "<> <= >= >> << ! ()[][[]] -+*/,:!=";
-    const expected_lexem_types = [_]TokenType{ .LT, .GT, .LE, .GE, .ASSIGN, .RETURN, .STATMENT_END, .LPAREN, .RPAREN, .LBRACKET, .RBRACKET, .LBRACKET_DOUBLE, .RBRACKET_DOUBLE, .SUB, .ADD, .TIMES, .DIV, .COMMA, .COLON, .NEQ };
+    const input = "<> <= >= >> << ! ()[][[]] -+*/,:!=100";
+    const expected_lexem_types = [_]TokenType{ .LT, .GT, .LE, .GE, .ASSIGN, .RETURN, .STATMENT_END, .LPAREN, .RPAREN, .LBRACKET, .RBRACKET, .LBRACKET_DOUBLE, .RBRACKET_DOUBLE, .SUB, .ADD, .TIMES, .DIV, .COMMA, .COLON, .NEQ, .INT_LIT };
     var lexer = try Lexer.init(input, std.testing.allocator);
     try lexer.scanTokens();
     try std.testing.expectEqual(expected_lexem_types.len, lexer.lexems.items.len);
@@ -242,6 +278,27 @@ test "Lexer simple lexems only" {
     for (lexer.lexems.items, expected_lexem_types) |my_lexem, expected_lexem| {
         try std.testing.expectEqual(expected_lexem, my_lexem.type);
     }
+
+    defer lexer.deinit();
+}
+
+test "Lexer number literals" {
+    const input = "100 20 30 01111 0000999999999";
+    const expected_lexem_values = [_]u64{ 100, 20, 30, 1111, 999999999 };
+    var lexer = try Lexer.init(input, std.testing.allocator);
+    try lexer.scanTokens();
+    try std.testing.expectEqual(expected_lexem_values.len, lexer.lexems.items.len);
+
+    for (lexer.lexems.items, expected_lexem_values) |my_lexem, expected_lexem| {
+        try std.testing.expectEqual(expected_lexem, my_lexem.value.?);
+    }
+
+    defer lexer.deinit();
+}
+test "Lexer bad number" {
+    const input = "10 20bcd";
+    var lexer = try Lexer.init(input, std.testing.allocator);
+    try std.testing.expectError(LexerError.CharacterInIntLiteral, lexer.scanTokens());
 
     defer lexer.deinit();
 }
