@@ -78,6 +78,8 @@ pub const Lexer = struct {
     allocator: Allocator,
     sc: ScannerCore,
     source: []const u8,
+    error_msg: ?[]const u8 = null,
+    print_msg_on_erorr: bool = true,
 
     pub fn init(content: []const u8, alloc: Allocator) !Lexer {
         return Lexer{
@@ -88,13 +90,41 @@ pub const Lexer = struct {
         };
     }
     pub fn scanTokens(self: *Lexer) !void {
+        errdefer {
+            self.generateErrorMessageInvalidToken() catch unreachable;
+            if (self.print_msg_on_erorr) {
+                std.debug.print("{s}", .{self.error_msg.?});
+            }
+        }
         while (!self.sc.isAtEnd()) {
             self.sc.startToken();
             try self.scanToken();
         }
     }
+    fn generateErrorMessageInvalidToken(self: *Lexer) !void {
+        var writer = std.Io.Writer.Allocating.init(self.allocator);
+        try writer.writer.print("Invalid token found at line: {d} col: {d}\n", .{ self.sc.token_line, self.sc.token_col });
+        var a = std.mem.splitAny(u8, self.source, "\n");
+        var line: []const u8 = undefined;
+        for (0..self.sc.token_line) |_| {
+            line = a.next().?;
+        }
+        const line_dupe = try self.allocator.dupe(u8, line);
+        defer self.allocator.free(line_dupe);
+        std.mem.replaceScalar(u8, line_dupe, '\t', ' ');
+        try writer.writer.print("{s}\n", .{line_dupe});
+        for (0..self.sc.token_col - 1) |_| {
+            try writer.writer.print(" ", .{});
+        }
+        try writer.writer.print("^\n", .{});
+        const result = try writer.toOwnedSlice();
+        if (self.error_msg != null) {
+            self.allocator.free(self.error_msg.?);
+        }
+        self.error_msg = result;
+    }
 
-    pub fn scanToken(self: *Lexer) !void {
+    fn scanToken(self: *Lexer) !void {
         const char_optional = self.sc.advance();
         if (char_optional == null) {
             return;
@@ -216,6 +246,9 @@ pub const Lexer = struct {
     pub fn deinit(self: *Lexer) void {
         self.lexems.clearAndFree(self.allocator);
         self.lexems.deinit(self.allocator);
+        if (self.error_msg) |err_msg| {
+            self.allocator.free(err_msg);
+        }
         self.* = undefined;
     }
 };
@@ -261,6 +294,7 @@ test "Lexer number literals" {
 test "Lexer bad number" {
     const input = "10 20bcd";
     var lexer = try Lexer.init(input, std.testing.allocator);
+    lexer.print_msg_on_erorr = false;
     try std.testing.expectError(LexerError.CharacterInIntLiteral, lexer.scanTokens());
 
     defer lexer.deinit();

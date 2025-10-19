@@ -4,12 +4,12 @@ pub const ScannerCore = struct {
     source: []const u8,
     // curr actually points to the next char to be lexed
     curr: usize = 0,
-    curr_line: u64 = 0,
-    curr_col: u64 = 0,
+    curr_line: u64 = 1,
+    curr_col: u64 = 1,
 
     token_start: u64 = 0,
-    token_line: u64 = 0,
-    token_col: u64 = 0,
+    token_line: u64 = 1,
+    token_col: u64 = 1,
     pub fn isAtEnd(self: *ScannerCore) bool {
         return self.curr >= self.source.len;
     }
@@ -21,7 +21,7 @@ pub const ScannerCore = struct {
         const curr_char = self.source[self.curr];
         if (curr_char == '\n') {
             self.curr_line += 1;
-            self.curr_col = 0;
+            self.curr_col = 1;
         } else {
             self.curr_col += 1;
         }
