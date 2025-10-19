@@ -63,7 +63,6 @@ fn isIdentifierPart(c: u8) bool {
     return isIdentifierStart(c) or isDigit(c);
 }
 
-// todo keywords map
 const Lexem = struct {
     type: TokenType,
     str: ?[]const u8 = null,
@@ -132,12 +131,13 @@ pub const Lexer = struct {
             '[' => try self.add(if (self.sc.match('[')) .LBRACKET_DOUBLE else .LBRACKET),
             ']' => try self.add(if (self.sc.match(']')) .RBRACKET_DOUBLE else .RBRACKET),
             '!' => try self.add(if (self.sc.match('=')) .NEQ else .STATMENT_END),
-            // todo add @ buiiltin
             else => {
                 if (isDigit(c)) {
                     try self.number();
                 } else if (isIdentifierStart(c)) {
                     try self.indentifierOrKeyword();
+                } else if (c == '@') {
+                    try self.builtIn();
                 } else {
                     return LexerError.UnkownToken;
                 }
@@ -185,6 +185,14 @@ pub const Lexer = struct {
         }
     }
 
+    pub fn builtIn(self: *Lexer) !void {
+        while (!self.sc.isAtEnd() and isAlphabetic(self.sc.peek().?)) {
+            _ = self.sc.advance();
+        }
+        const text = self.sc.source[self.sc.token_start + 1 .. self.sc.curr];
+        try self.addBuiltin(text);
+    }
+
     fn addLiteralInt(self: *Lexer, str: []const u8) !void {
         const parsed = try std.fmt.parseInt(u64, str, 10);
         var lexem = self.getLexemFromType(.INT_LIT);
@@ -195,6 +203,11 @@ pub const Lexer = struct {
 
     fn addIdentifier(self: *Lexer, str: []const u8) !void {
         var lexem = self.getLexemFromType(.IDENTIFIER);
+        lexem.str = str;
+        try self.lexems.append(self.allocator, lexem);
+    }
+    fn addBuiltin(self: *Lexer, str: []const u8) !void {
+        var lexem = self.getLexemFromType(.BUILTIN_FUN);
         lexem.str = str;
         try self.lexems.append(self.allocator, lexem);
     }
@@ -338,6 +351,22 @@ test "Lexer keywords" {
         try std.testing.expectEqual(expected_lexem, my_lexem.type);
     }
     try std.testing.expectEqualStrings("i_am_not_a_keyword", lexer.lexems.getLast().str.?);
+
+    defer lexer.deinit();
+}
+
+test "Lexer builtin functions" {
+    const input = "@print @max";
+    const expected_lexem_types = [_]TokenType{ .BUILTIN_FUN, .BUILTIN_FUN };
+    var lexer = try Lexer.init(input, std.testing.allocator);
+    try lexer.scanTokens();
+    try std.testing.expectEqual(expected_lexem_types.len, lexer.lexems.items.len);
+
+    for (lexer.lexems.items, expected_lexem_types) |my_lexem, expected_lexem| {
+        try std.testing.expectEqual(expected_lexem, my_lexem.type);
+    }
+    try std.testing.expectEqualStrings("print", lexer.lexems.items[0].str.?);
+    try std.testing.expectEqualStrings("max", lexer.lexems.items[1].str.?);
 
     defer lexer.deinit();
 }
