@@ -28,6 +28,13 @@ pub const ScannerCore = struct {
         self.curr += 1;
         return curr_char;
     }
+    pub fn advanceUntil(self: *ScannerCore, char: u8) bool {
+        while (!self.isAtEnd() and self.peek() != char) {
+            _ = self.advance();
+        }
+        _ = self.advance();
+        return self.isAtEnd();
+    }
 
     pub fn startToken(self: *ScannerCore) void {
         self.token_start = self.curr;
@@ -100,4 +107,11 @@ test "ScannerCore basics" {
         last_token = tok;
     }
     try std.testing.expectEqual('g', last_token);
+}
+
+test "ScannerCore advanceUntil" {
+    const s1 = "#This is a comment\nthis is not";
+    var sc = ScannerCore{ .source = s1[0..] };
+    _ = sc.advanceUntil('\n');
+    try std.testing.expectEqual('t', sc.advance().?);
 }

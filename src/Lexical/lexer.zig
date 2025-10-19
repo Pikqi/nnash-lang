@@ -140,7 +140,11 @@ pub const Lexer = struct {
             '*' => try self.add(.TIMES),
             '/' => try self.add(.DIV),
             '%' => try self.add(.MOD),
+            '|' => try self.add(.PIPE),
             ' ', '\n', '\t' => {},
+            '#' => {
+                _ = self.sc.advanceUntil('\n');
+            },
             '>' => {
                 if (self.sc.match('>')) {
                     try self.add(.ASSIGN);
