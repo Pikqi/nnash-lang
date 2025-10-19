@@ -1,6 +1,9 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
+const isDigit = std.ascii.isDigit;
+const isAlphabetic = std.ascii.isAlphabetic;
+
 const TokenType = enum {
     // Arithmetic
     ADD,
@@ -20,6 +23,7 @@ const TokenType = enum {
     ENDWHILE,
     FUN_DEC,
     END_FUN_DEC,
+    RETURN,
     // Parens and brackets
     LPAREN,
     RPAREN,
@@ -37,6 +41,9 @@ const TokenType = enum {
     STRING_LIT,
     VOID_LIT, //maybe?
     // misc
+    STATMENT_END,
+    COMMA,
+    COLON,
     ASSIGN,
     BUILTIN_FUN,
     PIPE,
@@ -46,10 +53,10 @@ const TokenType = enum {
 // todo keywords map
 const Lexem = struct {
     type: TokenType,
-    str: []const u8,
+    str: ?[]const u8 = null,
     line: u64 = 0,
-    col_start: u6 = 0,
-    col_end: u6 = 0,
+    col_start: u64 = 0,
+    col_end: u64 = 0,
 };
 
 pub const Lexer = struct {
@@ -58,10 +65,10 @@ pub const Lexer = struct {
     sc: ScannerCore,
     source: []const u8,
 
-    pub fn init(content: []const u8, alloc: Allocator) Lexer {
+    pub fn init(content: []const u8, alloc: Allocator) !Lexer {
         return Lexer{
             .allocator = alloc,
-            .lexems = std.ArrayList(Lexem).initCapacity(alloc, 100),
+            .lexems = try std.ArrayList(Lexem).initCapacity(alloc, 100),
             .source = content,
             .sc = ScannerCore{ .source = content },
         };
@@ -74,7 +81,66 @@ pub const Lexer = struct {
     }
 
     pub fn scanToken(self: *Lexer) !void {
-        _ = self; // autofix
+        const char_optional = self.sc.advance();
+        if (char_optional == null) {
+            return;
+        }
+        const c = char_optional.?;
+        switch (c) {
+            '(' => try self.add(.LPAREN),
+            ')' => try self.add(.RPAREN),
+            ',' => try self.add(.COMMA),
+            ':' => try self.add(.COLON),
+            '+' => try self.add(.ADD),
+            '-' => try self.add(.SUB),
+            '*' => try self.add(.TIMES),
+            '/' => try self.add(.DIV),
+            '%' => try self.add(.MOD),
+            ' ', '\n', '\t' => {},
+            '>' => {
+                if (self.sc.match('>')) {
+                    try self.add(.ASSIGN);
+                } else if (self.sc.match('=')) {
+                    try self.add(.GE);
+                } else {
+                    try self.add(.GT);
+                }
+            },
+            '<' => {
+                if (self.sc.match('<')) {
+                    try self.add(.RETURN);
+                } else if (self.sc.match('=')) {
+                    try self.add(.LE);
+                } else {
+                    try self.add(.LT);
+                }
+            },
+            '[' => try self.add(if (self.sc.match('[')) .LBRACKET_DOUBLE else .LBRACKET),
+            ']' => try self.add(if (self.sc.match(']')) .RBRACKET_DOUBLE else .RBRACKET),
+            '!' => try self.add(if (self.sc.match('=')) .NEQ else .STATMENT_END),
+            else => {
+                return error.NotKnown;
+            },
+        }
+    }
+    fn add(self: *Lexer, t: TokenType) !void {
+        const lex = self.getLexemFromType(t);
+        try self.lexems.append(self.allocator, lex);
+    }
+
+    fn addString(self: *Lexer, t: TokenType, str: []const u8) !void {
+        var lex = self.getLexemFromType(t);
+        lex.str = str;
+        try self.lexems.append(self.allocator, lex);
+    }
+
+    fn getLexemFromType(self: *Lexer, t: TokenType) Lexem {
+        return Lexem{
+            .type = t,
+            .col_start = self.sc.token_col,
+            .col_end = self.sc.curr_col,
+            .line = self.sc.token_line,
+        };
     }
 
     // Parsira broj, puca ako se broj ne zavrsava sa whitespace
@@ -84,6 +150,10 @@ pub const Lexer = struct {
 
     pub fn indentifierOrKeyword(self: *Lexer) !void {
         _ = self; // autofix
+    }
+    pub fn deinit(self: *Lexer) void {
+        self.lexems.clearAndFree(self.allocator);
+        self.* = undefined;
     }
 };
 
@@ -161,6 +231,22 @@ pub const ScannerCore = struct {
     }
 };
 
+// ********** Lexer tests **********
+test "Lexer simple lexems only" {
+    const input = "<> <= >= >> << ! ()[][[]] -+*/,:!=";
+    const expected_lexem_types = [_]TokenType{ .LT, .GT, .LE, .GE, .ASSIGN, .RETURN, .STATMENT_END, .LPAREN, .RPAREN, .LBRACKET, .RBRACKET, .LBRACKET_DOUBLE, .RBRACKET_DOUBLE, .SUB, .ADD, .TIMES, .DIV, .COMMA, .COLON, .NEQ };
+    var lexer = try Lexer.init(input, std.testing.allocator);
+    try lexer.scanTokens();
+    try std.testing.expectEqual(expected_lexem_types.len, lexer.lexems.items.len);
+
+    for (lexer.lexems.items, expected_lexem_types) |my_lexem, expected_lexem| {
+        try std.testing.expectEqual(expected_lexem, my_lexem.type);
+    }
+
+    defer lexer.deinit();
+}
+
+// ********** Scanner core tests **********
 test "ScannerCore basics" {
     const s1 = "Some nice string";
     var sc = ScannerCore{ .source = s1[0..] };
