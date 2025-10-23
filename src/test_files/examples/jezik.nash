@@ -1,0 +1,66 @@
+#nnash - nash is not a shell
+
+int:a,b,c! 
+boole: george! # a boolean named george
+
+2>>a! # a = 2
+3>>b! # b = 3
+
+a + b >> c!  # 'redirekcija' za asignment c = a + b
+# ili sa deklaracijom u jednoj liniji
+a + b >> int:c!
+
+c | @print! # poziv builtin funkcije, builtin funkcije krecu sa @
+#nnash - nash is not a shell
+
+int:a,b,c! 
+boole: george! # a boolean named george
+string: moj_str!
+int(3): moj_niz!
+
+2>>a! # a = 2
+3>>b! # b = 3
+
+a + b >> c!  # 'redirekcija' za asignment c = a + b
+# ili sa deklaracijom u jednoj liniji
+a + b >> int:c!
+
+c | @print! # poziv builtin funkcije, builtin funkcije krecu sa @
+# args | func
+
+(a,b) | @max | @print! # (a, b, ...) uredjena n-torka
+
+[a < b] {"manje":"vece"} | @print! # [logiciki uslov] {ako da  : ako ne}
+
+
+fun moja_funkcija [[a, b]]
+	a-1>>a!
+
+	(a, b) | moja_funkcija
+
+	<< a + b! #  << = return
+nuf
+
+while [true] 
+	statement!
+elihw
+
+# args | func
+
+(a,b) | @max | @print! # (a, b, ...) uredjena n-torka
+
+[a < b] {"manje":"vece"} | @print! # [logiciki uslov] {ako da  : ako ne}
+
+
+fun void:moja_funkcija [[int:a, int:b]]
+	a-1>>a!
+
+	(a, b) | moja_funkcija
+
+	<< a + b! #  << = return
+nuf
+
+while [true] 
+	statement!
+elihw
+

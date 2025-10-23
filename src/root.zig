@@ -7,4 +7,5 @@ test "import" {
     _ = @import("preprocessor.zig");
     _ = @import("Lexical/lexer.zig");
     _ = @import("Lexical/scanner.zig");
+    _ = @import("testing.zig");
 }
