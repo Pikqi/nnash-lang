@@ -8,6 +8,7 @@ const isAlphabetic = std.ascii.isAlphabetic;
 const LexerError = error{
     CharacterInIntLiteral,
     UnkownToken,
+    StringLiteralNotFinished,
 };
 
 const TokenType = enum {
@@ -37,6 +38,8 @@ const TokenType = enum {
     RBRACKET,
     LBRACKET_DOUBLE,
     RBRACKET_DOUBLE,
+    LBRACE,
+    RBRACE,
     // Types
     INT,
     FLOAT,
@@ -64,7 +67,7 @@ fn isIdentifierPart(c: u8) bool {
     return isIdentifierStart(c) or isDigit(c);
 }
 
-const Lexem = struct {
+pub const Lexem = struct {
     type: TokenType,
     str: ?[]const u8 = null,
     line: u64 = 0,
@@ -133,6 +136,8 @@ pub const Lexer = struct {
         switch (c) {
             '(' => try self.add(.LPAREN),
             ')' => try self.add(.RPAREN),
+            '{' => try self.add(.RBRACE),
+            '}' => try self.add(.LBRACE),
             ',' => try self.add(.COMMA),
             ':' => try self.add(.COLON),
             '+' => try self.add(.ADD),
@@ -144,6 +149,13 @@ pub const Lexer = struct {
             ' ', '\n', '\t' => {},
             '#' => {
                 _ = self.sc.advanceUntil('\n');
+            },
+            '"' => {
+                if (self.sc.matchUntil('"')) {
+                    try self.add(.STRING_LIT);
+                } else {
+                    return LexerError.StringLiteralNotFinished;
+                }
             },
             '>' => {
                 if (self.sc.match('>')) {
@@ -301,6 +313,31 @@ test "Lexer bad number" {
     lexer.print_msg_on_erorr = false;
     try std.testing.expectError(LexerError.CharacterInIntLiteral, lexer.scanTokens());
 
+    defer lexer.deinit();
+}
+
+// todo there is a bug if "" is the last token of input
+test "Lexer string literals" {
+    const input =
+        \\ "some nice string"
+        \\ ""
+        \\
+    ;
+    var lexer = try Lexer.init(input, std.testing.allocator);
+    defer lexer.deinit();
+    try lexer.scanTokens();
+}
+
+test "Lexer string literals not terminated error" {
+    const input =
+        \\ "some nice string"
+        \\ "Ooops i forgot to end this string
+        \\ a >> b!
+    ;
+    var lexer = try Lexer.init(input, std.testing.allocator);
+    lexer.print_msg_on_erorr = false;
+    const er = lexer.scanTokens();
+    try std.testing.expectError(LexerError.StringLiteralNotFinished, er);
     defer lexer.deinit();
 }
 

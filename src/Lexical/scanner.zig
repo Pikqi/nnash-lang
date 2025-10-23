@@ -66,6 +66,23 @@ pub const ScannerCore = struct {
         }
         return is_match;
     }
+    pub fn matchUntil(self: *ScannerCore, char: u8) bool {
+        const old_state = struct {
+            curr: usize,
+            curr_line: u64,
+            curr_col: u64,
+        }{ .curr = self.curr, .curr_line = self.curr_line, .curr_col = self.curr_col };
+
+        // If we advanced until the end and we didn't find our char,
+        // then pop the last matched state
+        if (self.advanceUntil(char)) {
+            self.curr = old_state.curr;
+            self.curr_col = old_state.curr_col;
+            self.curr_line = old_state.curr_line;
+            return false;
+        }
+        return true;
+    }
 
     pub fn peek(self: *ScannerCore) ?u8 {
         if (self.isAtEnd()) {
