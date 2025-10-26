@@ -9,6 +9,7 @@ const LexerError = error{
     CharacterInIntLiteral,
     UnkownToken,
     StringLiteralNotFinished,
+    TooManyDotsInANumber,
 };
 
 const TokenType = enum {
@@ -67,13 +68,18 @@ fn isIdentifierPart(c: u8) bool {
     return isIdentifierStart(c) or isDigit(c);
 }
 
+pub const LexemValue = union {
+    int: u64,
+    float: f64,
+};
+
 pub const Lexem = struct {
     type: TokenType,
     str: ?[]const u8 = null,
     line: u64 = 0,
     col_start: u64 = 0,
     col_end: u64 = 0,
-    value: ?u64 = 0,
+    value: ?LexemValue = null,
 };
 
 pub const Lexer = struct {
@@ -206,7 +212,7 @@ pub const Lexer = struct {
     }
 
     pub fn number(self: *Lexer) !void {
-        while (!self.sc.isAtEnd() and isDigit(self.sc.peek().?)) {
+        while (!self.sc.isAtEnd() and (isDigit(self.sc.peek().?) or self.sc.peek().? == '.')) {
             _ = self.sc.advance();
         }
         const text = self.sc.source[self.sc.token_start..self.sc.curr];
@@ -216,7 +222,13 @@ pub const Lexer = struct {
                 return LexerError.CharacterInIntLiteral;
             }
         }
-        try self.addLiteralInt(text);
+        switch (std.mem.count(u8, text, ".")) {
+            0 => try self.addLiteralInt(text),
+            1 => try self.addLiteralFloat(text),
+            else => {
+                return LexerError.TooManyDotsInANumber;
+            },
+        }
     }
 
     pub fn indentifierOrKeyword(self: *Lexer) !void {
@@ -244,7 +256,15 @@ pub const Lexer = struct {
         const parsed = try std.fmt.parseInt(u64, str, 10);
         var lexem = self.getLexemFromType(.INT_LIT);
         lexem.str = str;
-        lexem.value = parsed;
+        lexem.value = .{ .int = parsed };
+        try self.lexems.append(self.allocator, lexem);
+    }
+
+    fn addLiteralFloat(self: *Lexer, str: []const u8) !void {
+        const parsed = try std.fmt.parseFloat(f64, str);
+        var lexem = self.getLexemFromType(.FLOAT_LIT);
+        lexem.str = str;
+        lexem.value = .{ .float = parsed };
         try self.lexems.append(self.allocator, lexem);
     }
 
@@ -302,7 +322,7 @@ test "Lexer number literals" {
     try std.testing.expectEqual(expected_lexem_values.len, lexer.lexems.items.len);
 
     for (lexer.lexems.items, expected_lexem_values) |my_lexem, expected_lexem| {
-        try std.testing.expectEqual(expected_lexem, my_lexem.value.?);
+        try std.testing.expectEqual(expected_lexem, my_lexem.value.?.int);
     }
 
     defer lexer.deinit();
