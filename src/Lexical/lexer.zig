@@ -50,6 +50,8 @@ const TokenType = enum {
     INT_LIT,
     FLOAT_LIT,
     STRING_LIT,
+    TRUE_LIT,
+    FALSE_LIT,
     VOID_LIT, //maybe?
     // misc
     IDENTIFIER,
@@ -298,6 +300,8 @@ const keywords = std.static_string_map.StaticStringMap(TokenType).initComptime(&
     .{ "string", TokenType.STRING },
     .{ "boole", TokenType.BOOL },
     .{ "float", TokenType.FLOAT },
+    .{ "true", TokenType.TRUE_LIT },
+    .{ "false", TokenType.FALSE_LIT },
 });
 
 test "Lexer simple lexems only" {
@@ -362,8 +366,8 @@ test "Lexer string literals not terminated error" {
 }
 
 test "Lexer keywords" {
-    const input = "while elihw fun nuf int string boole float i_am_not_a_keyword";
-    const expected_lexem_types = [_]TokenType{ .WHILE, .ENDWHILE, .FUN_DEC, .END_FUN_DEC, .INT, .STRING, .BOOL, .FLOAT, .IDENTIFIER };
+    const input = "while elihw fun nuf int string boole float true false i_am_not_a_keyword";
+    const expected_lexem_types = [_]TokenType{ .WHILE, .ENDWHILE, .FUN_DEC, .END_FUN_DEC, .INT, .STRING, .BOOL, .FLOAT, .TRUE_LIT, .FALSE_LIT, .IDENTIFIER };
     var lexer = try Lexer.init(input, std.testing.allocator);
     try lexer.scanTokens();
     try std.testing.expectEqual(expected_lexem_types.len, lexer.lexems.items.len);
