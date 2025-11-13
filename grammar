@@ -1,0 +1,76 @@
+// EBNF notacija, {} je ponavljanje kao * u reg. izrazima, [] je opciono kao ? u reg.izrazima, () menja prioritete
+
+
+program = {top_item} EOF
+
+top_item = blocks | top_simple
+top_simple = (var_decl | var_decl_assign | call_and_maybe_assign | assign_stmt) STATMENT_END;
+
+blocks = ( while_block | if_block | fun_block )
+
+if_start = IF LBRACKET expr RBRACKET
+if_block = if_start block END_IF
+
+while_start = WHILE LBRACKET expr RBRACKET
+while_block = while_start block END_WHILE
+block = { (stmt STATMENT_END) | blocks }
+
+fun_start = FUN_DEC IDENT LBRACKET_DOUBLE { params } RBRACKET_DOUBLE
+fun_block = fun_start block END_FUN_DEC
+params = param { COMMA param }
+param = type COLON IDENT
+
+stmt           = var_decl_assign | return_stmt | call_and_maybe_assign | assign_stmt ;
+array_dims     = LBRACKET expr RBRACKET { LBRACKET expr RBRACKET }
+var_decl       = type COLON (IDENT | IDENT array_dims)
+var_decl_assign= lvalue ASSIGN var_decl
+
+type = INT | FLOAT | STRING | BOOL
+
+call_and_maybe_assign = call_expr [ ASSIGN lvalue ] ;
+assign_stmt    = expr_no_call ASSIGN lvalue ;
+
+return_stmt    = RETURN expr ;
+
+lvalue         = IDENT { LBRACKET expr RBRACKET } ;
+
+call_expr      = args PIPE call_expr_continue
+call_expr_continue = (IDENT | BUILTIN_FUN) (PIPE call_expr_continue)?;
+
+tuple					 = LPAREN expr { COMMA expr }  RPAREN ;
+args					 = expr | tuple 
+
+expr           = aexpr ;
+aexpr          = call_expr | ( atom [ arith_op atom ] ) ;
+expr_no_call   = aexpr_no_call ;
+aexpr_no_call  = atom [ arith_op atom ] ;
+
+arith_op       = ADD | SUB | TIMES | DIV | MOD ;
+
+atom           = literal | IDENT { LBRACKET expr RBRACKET }
+               | LPAREN expr RPAREN ;
+
+cond           = aexpr rel_op aexpr;
+rel_op         = LT | LE | GT | GE | EQ | NEQ ;
+
+literal        = VOID_LIT | INT_LIT | FLOAT_LIT | STRING_LIT
+
+print(max((a,b)))
+
+(a,b) | @max | @print! # (a, b, ...) uredjena n-torka
+
+expr
+	call_expr
+	  args 
+		expr
+			call_expr
+				tuple
+					a
+					b
+				BUILTIN_FUN
+					@max
+		BUILTIN_FUN
+			@print
+
+
+
