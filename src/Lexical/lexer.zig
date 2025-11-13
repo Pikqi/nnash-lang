@@ -54,7 +54,7 @@ const TokenType = enum {
     FALSE_LIT,
     VOID_LIT, //maybe?
     // misc
-    IDENTIFIER,
+    IDENT,
     STATMENT_END,
     COMMA,
     COLON,
@@ -271,7 +271,7 @@ pub const Lexer = struct {
     }
 
     fn addIdentifier(self: *Lexer, str: []const u8) !void {
-        var lexem = self.getLexemFromType(.IDENTIFIER);
+        var lexem = self.getLexemFromType(.IDENT);
         lexem.str = str;
         try self.lexems.append(self.allocator, lexem);
     }
@@ -367,7 +367,7 @@ test "Lexer string literals not terminated error" {
 
 test "Lexer keywords" {
     const input = "while elihw fun nuf int string boole float true false i_am_not_a_keyword";
-    const expected_lexem_types = [_]TokenType{ .WHILE, .ENDWHILE, .FUN_DEC, .END_FUN_DEC, .INT, .STRING, .BOOL, .FLOAT, .TRUE_LIT, .FALSE_LIT, .IDENTIFIER };
+    const expected_lexem_types = [_]TokenType{ .WHILE, .ENDWHILE, .FUN_DEC, .END_FUN_DEC, .INT, .STRING, .BOOL, .FLOAT, .TRUE_LIT, .FALSE_LIT, .IDENT };
     var lexer = try Lexer.init(input, std.testing.allocator);
     try lexer.scanTokens();
     try std.testing.expectEqual(expected_lexem_types.len, lexer.lexems.items.len);
