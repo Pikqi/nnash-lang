@@ -1,3 +1,4 @@
+// TODO ADD VOID type
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const ScannerCore = @import("scanner.zig").ScannerCore;
@@ -12,7 +13,7 @@ const LexerError = error{
     TooManyDotsInANumber,
 };
 
-const TokenType = enum {
+pub const TokenType = enum {
     // Arithmetic
     ADD,
     SUB,
@@ -27,6 +28,8 @@ const TokenType = enum {
     EQ,
     NEQ,
     //blocks
+    IF,
+    END_IF,
     WHILE,
     ENDWHILE,
     FUN_DEC,
@@ -302,6 +305,8 @@ const keywords = std.static_string_map.StaticStringMap(TokenType).initComptime(&
     .{ "float", TokenType.FLOAT },
     .{ "true", TokenType.TRUE_LIT },
     .{ "false", TokenType.FALSE_LIT },
+    .{ "if", TokenType.IF },
+    .{ "fi", TokenType.END_IF },
 });
 
 test "Lexer simple lexems only" {
@@ -366,8 +371,8 @@ test "Lexer string literals not terminated error" {
 }
 
 test "Lexer keywords" {
-    const input = "while elihw fun nuf int string boole float true false i_am_not_a_keyword";
-    const expected_lexem_types = [_]TokenType{ .WHILE, .ENDWHILE, .FUN_DEC, .END_FUN_DEC, .INT, .STRING, .BOOL, .FLOAT, .TRUE_LIT, .FALSE_LIT, .IDENT };
+    const input = "while elihw fun nuf int string boole float true false if fi i_am_not_a_keyword ";
+    const expected_lexem_types = [_]TokenType{ .WHILE, .ENDWHILE, .FUN_DEC, .END_FUN_DEC, .INT, .STRING, .BOOL, .FLOAT, .TRUE_LIT, .FALSE_LIT, .IF, .END_IF, .IDENT };
     var lexer = try Lexer.init(input, std.testing.allocator);
     try lexer.scanTokens();
     try std.testing.expectEqual(expected_lexem_types.len, lexer.lexems.items.len);

@@ -8,14 +8,14 @@ top_simple = (var_decl | var_decl_assign | call_and_maybe_assign | assign_stmt) 
 
 blocks = ( while_block | if_block | fun_block )
 
-if_start = IF LBRACKET expr RBRACKET
+if_start = IF LBRACKET cond RBRACKET
 if_block = if_start block END_IF
 
-while_start = WHILE LBRACKET expr RBRACKET
+while_start = WHILE LBRACKET cond RBRACKET
 while_block = while_start block END_WHILE
 block = { (stmt STATMENT_END) | blocks }
 
-fun_start = FUN_DEC IDENT LBRACKET_DOUBLE { params } RBRACKET_DOUBLE
+fun_start = FUN_DEC IDENT LBRACKET_DOUBLE { params } RBRACKET_DOUBLE COLON type
 fun_block = fun_start block END_FUN_DEC
 params = param { COMMA param }
 param = type COLON IDENT
@@ -25,7 +25,7 @@ array_dims     = LBRACKET expr RBRACKET { LBRACKET expr RBRACKET }
 var_decl       = type COLON (IDENT | IDENT array_dims)
 var_decl_assign= lvalue ASSIGN var_decl
 
-type = INT | FLOAT | STRING | BOOL
+type = INT | FLOAT | STRING | BOOL | VOID
 
 call_and_maybe_assign = call_expr [ ASSIGN lvalue ] ;
 assign_stmt    = expr_no_call ASSIGN lvalue ;
