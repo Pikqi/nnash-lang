@@ -20,6 +20,7 @@ pub const TokenType = enum {
     TIMES,
     DIV,
     MOD,
+    POW,
     // logic
     LT,
     LE,

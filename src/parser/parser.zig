@@ -13,6 +13,7 @@ const ParserError = error{
     SyntaxError,
 };
 
+var buff: [1024]u8 = undefined;
 pub const Parser = struct {
     tokens: []Lexem,
     current: usize = 0,
@@ -42,14 +43,18 @@ pub const Parser = struct {
         }
         try ast_printer.dump(writer, self.program.?);
     }
-    pub fn parse(self: *Self) void {
+    pub fn parse(self: *Self) !void {
         self.program = .{
             // todo
             .top_items = ArrayList(*ast.TopItem).initCapacity(self.alloc, 20) catch unreachable,
         };
-        self.parseProgram() catch {
-            self.deinit();
-        };
+        errdefer {
+            const stdout = std.fs.File.stdout();
+            var buffered_writer = stdout.writer(&buff);
+            const writer = &buffered_writer.interface;
+            ast_printer.dump(writer, self.program.?) catch unreachable;
+        }
+        try self.parseProgram();
     }
 
     fn parseProgram(self: *Self) !void {
@@ -63,12 +68,15 @@ pub const Parser = struct {
         switch (self.peek().type) {
             .FUN_DEC => {
                 // todo function declaration
+                return error.NotImplemented;
             },
             .WHILE => {
                 // todo while block
+                return error.NotImplemented;
             },
             .IF => {
                 // todo while block
+                return error.NotImplemented;
             },
             else => {
                 ti.* = .{ .simple = try self.topSimple() };
@@ -76,11 +84,39 @@ pub const Parser = struct {
         }
         return ti;
     }
+
+    // top_simple = (var_decl | var_decl_assign | assign_stmt) STATMENT_END;
+    // var_decl       = type COLON (IDENT | IDENT array_dims)
+    // var_decl_assign= expr ASSIGN var_decl
+    // assign_stmt    = expr ASSIGN lvalue ;
     fn topSimple(self: *Self) !*ast.TopSimpleItem {
         const ts = try self.alloc.create(ast.TopSimpleItem);
         if (self.matchType() != null) {
             ts.* = .{ .varDeclaration = try self.varDeclaration() };
+            _ = try self.consume(.STATMENT_END, "Expected !");
+            return ts;
         }
+        const ex = try self.parseExpression();
+        // assign_stmt | var_decl_assign
+        if (self.match(.ASSIGN) != null) {
+            // var_decl_assign
+            if (self.matchType() != null) {
+                const vd = try self.varDeclaration();
+                ts.* = .{ .varDeclarationAsign = try self.alloc.create(ast.VarDeclarationAsign) };
+                ts.varDeclarationAsign.expr = ex;
+                ts.varDeclarationAsign.varDeclaration = vd;
+            } else if (self.match(.IDENT)) |matched| {
+                const as = try self.alloc.create(ast.AssignStatement);
+                as.expr = ex;
+                as.ident = try self.alloc.dupe(u8, matched.str.?);
+                ts.* = .{ .assignStatement = as };
+            }
+        } else {
+            return error.NotImplemented;
+        }
+        _ = try self.consume(.STATMENT_END, "Expected !");
+
+        std.debug.print("ts: {any}", .{ts});
         return ts;
     }
     // var_decl = type COLON (IDENT | IDENT array_dims)
@@ -89,21 +125,21 @@ pub const Parser = struct {
         const type_lexem = self.matchType();
         if (type_lexem == null) {
             self.reportError("Tried to parse type declaration but previous token is not a type");
+            // return error.SyntaxError;
             return error.SyntaxError;
         }
-        switch (type_lexem.?.type) {
-            .INT => vd.type = .INT,
-            .FLOAT => vd.type = .FLOAT,
-            .STRING => vd.type = .STRING,
-            .BOOL => vd.type = .BOOL,
-            .VOID_LIT => vd.type = .VOID,
+        vd.type = switch (type_lexem.?.type) {
+            .INT => .INT,
+            .FLOAT => .FLOAT,
+            .STRING => .STRING,
+            .BOOL => .BOOL,
+            .VOID_LIT => .VOID,
             else => unreachable,
-        }
+        };
         _ = self.advance(); // consume type
         _ = try self.consume(.COLON, "Expected : after type");
         const ident_token = try self.consume(.IDENT, "Expected identifier");
         vd.ident = try self.alloc.dupe(u8, ident_token.str.?);
-        _ = try self.consume(.STATMENT_END, "expected statement end");
 
         if (self.match(.LBRACKET) != null) {
             self.reportError("Array dims not implemented");
@@ -111,6 +147,116 @@ pub const Parser = struct {
         }
         return vd;
     }
+    // assign_stmt    = expr ASSIGN lvalue ;
+    fn asignStatement(self: *Self) !*ast.AssignStatement {
+        const as = try self.alloc.create(ast.AssignStatement);
+        as.expr = try self.parseExpression();
+        as.ident = try self.consume(.IDENT, "Expected ident");
+        return as;
+    }
+
+    // expr           = aexpr | call_expr ;
+    fn parseExpression(self: *Self) anyerror!*ast.Expression {
+        const ex = try self.alloc.create(ast.Expression);
+        // tuple
+        if (self.check(.LBRACKET)) {
+            self.reportError("Not implemented tuple");
+            return error.NotImplemented;
+        }
+        ex.* = .{ .aExpression = try self.parseAExpression() };
+        return ex;
+    }
+
+    // add = mul { ( PLUS | MINUS ) mul };
+    fn parseAExpression(self: *Self) !*ast.AExpression {
+        const ax = try self.alloc.create(ast.AExpression);
+        var muls = try ArrayList(*ast.Mul).initCapacity(self.alloc, 5);
+        var operands = try ArrayList(ast.PlusMinus).initCapacity(self.alloc, 5);
+        try muls.append(self.alloc, try self.parseMul());
+        while (true) {
+            const matched = self.matchOneOf(&[_]TokenType{ .ADD, .SUB });
+            if (matched == null) break;
+            try operands.append(self.alloc, lexemToPlusMinus(matched.?) catch unreachable);
+            try muls.append(self.alloc, try self.parseMul());
+        }
+        ax.muls = try muls.toOwnedSlice(self.alloc);
+        ax.ops = try operands.toOwnedSlice(self.alloc);
+
+        return ax;
+    }
+
+    // mul = unary { ( TIMES | DIV ) unary }
+    fn parseMul(self: *Self) !*ast.Mul {
+        const ml = try self.alloc.create(ast.Mul);
+        ml.leftUnary = try self.parseUnary();
+
+        return ml;
+    }
+
+    // unary = [ PLUS | MINUS ] power
+    fn parseUnary(self: *Self) !*ast.Unary {
+        const un = try self.alloc.create(ast.Unary);
+        const matched = self.matchOneOf(&[_]TokenType{ .ADD, .SUB });
+        if (matched) |plus_minus| {
+            un.sign = lexemToPlusMinus(plus_minus) catch unreachable;
+        }
+        un.power = try self.parsePower();
+        return un;
+    }
+    // power = primary [ POW power ];
+    fn parsePower(self: *Self) !*ast.Power {
+        const po = try self.alloc.create(ast.Power);
+        po.primary = try self.parsePrimary();
+
+        // TODO ADD PARSING POW IN LEXER
+        if (self.match(.POW) != null) {
+            po.pow = try self.parsePower();
+        }
+        return po;
+    }
+
+    fn parsePrimary(self: *Self) !*ast.Primary {
+        const pr = try self.alloc.create(ast.Primary);
+        const matched = self.matchOneOf(&[_]TokenType{ .INT_LIT, .FLOAT_LIT, .IDENT });
+        if (matched == null) {
+            pr.* = .{ .expr = try self.parseExpression() };
+        } else {
+            switch (matched.?.type) {
+                .INT_LIT => {
+                    pr.* = .{ .number = .{ .int_lit = matched.? } };
+                },
+                .FLOAT_LIT => {
+                    pr.* = .{ .number = .{ .float_lit = matched.? } };
+                },
+                .IDENT => {
+                    pr.* = .{ .number = .{ .ident = matched.? } };
+                },
+                else => unreachable,
+            }
+        }
+        return pr;
+    }
+    fn startsExpression(self: *Self) !bool {
+        if (self.checkLiteral()) {
+            return true;
+        }
+        return error.NotImplemented;
+    }
+
+    fn checkLiteral(self: *Self) bool {
+        return switch (self.peek().type) {
+            .INT_LIT,
+            .FLOAT_LIT,
+            .STRING_LIT,
+            .TRUE_LIT,
+            .FALSE_LIT,
+            .VOID_LIT,
+            => true,
+
+            else => false,
+        };
+    }
+
     // Utilities
     fn check(self: Self, token_type: TokenType) bool {
         return self.peek().type == token_type;
@@ -140,10 +286,10 @@ pub const Parser = struct {
         return null;
     }
 
-    fn consume(self: *Parser, expected: TokenType, msg: []const u8) ParserError!Lexem {
+    fn consume(self: *Parser, expected: TokenType, msg: []const u8) !Lexem {
         if (!self.check(expected)) {
             self.reportError(msg);
-            return ParserError.SyntaxError;
+            return error.SyntaxError;
         }
         _ = self.advance();
         return self.previous();
@@ -169,3 +315,10 @@ pub const Parser = struct {
         return self.current == self.tokens.len;
     }
 };
+fn lexemToPlusMinus(lexem: Lexem) !ast.PlusMinus {
+    return switch (lexem.type) {
+        .ADD => .PLUS,
+        .SUB => .MINUS,
+        else => error.NotPlusMinus,
+    };
+}

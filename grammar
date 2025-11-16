@@ -4,7 +4,8 @@
 program = {top_item} EOF
 
 top_item = blocks | top_simple
-top_simple = (var_decl | var_decl_assign | call_and_maybe_assign | assign_stmt) STATMENT_END;
+// TODO
+top_simple = (var_decl | var_decl_assign | assign_stmt | call_expr) STATMENT_END;
 
 blocks = ( while_block | if_block | fun_block )
 
@@ -23,12 +24,11 @@ param = type COLON IDENT
 stmt           = var_decl_assign | return_stmt | call_and_maybe_assign | assign_stmt ;
 array_dims     = LBRACKET expr RBRACKET { LBRACKET expr RBRACKET }
 var_decl       = type COLON (IDENT | IDENT array_dims)
-var_decl_assign= lvalue ASSIGN var_decl
+var_decl_assign= expr ASSIGN var_decl
 
 type = INT | FLOAT | STRING | BOOL | VOID
 
-call_and_maybe_assign = call_expr [ ASSIGN lvalue ] ;
-assign_stmt    = expr_no_call ASSIGN lvalue ;
+assign_stmt    = expr ASSIGN lvalue ;
 
 return_stmt    = RETURN expr ;
 
@@ -37,18 +37,18 @@ lvalue         = IDENT { LBRACKET expr RBRACKET } ;
 call_expr      = args PIPE call_expr_continue
 call_expr_continue = (IDENT | BUILTIN_FUN) (PIPE call_expr_continue)?;
 
-tuple					 = LPAREN expr { COMMA expr }  RPAREN ;
-args					 = expr | tuple 
+tuple					 = LBRACKET expr { COMMA expr }  RBRACKET ;
+args					 = tuple 
 
-expr           = aexpr ;
-aexpr          = call_expr | ( atom [ arith_op atom ] ) ;
-expr_no_call   = aexpr_no_call ;
-aexpr_no_call  = atom [ arith_op atom ] ;
+expr           = aexpr | call_expr ;
+aexpr          = add ;
+add            = mul { ( PLUS | MINUS ) mul };
+mul            = unary { ( TIMES | DIV ) unary }
+unary          = [ PLUS | MINUS ] power
+power 				 = primary [ POW power ];
+primary 			 = number | ( LPAREN expr RPAREN );
+number  			 = IDENT | INT_LIT | FLOAT_LIT
 
-arith_op       = ADD | SUB | TIMES | DIV | MOD ;
-
-atom           = literal | IDENT { LBRACKET expr RBRACKET }
-               | LPAREN expr RPAREN ;
 
 cond           = aexpr rel_op aexpr;
 rel_op         = LT | LE | GT | GE | EQ | NEQ ;

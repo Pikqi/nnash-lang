@@ -31,9 +31,9 @@ a + b >> int:c!
 c | @print! # poziv builtin funkcije, builtin funkcije krecu sa @
 # args | func
 
-(a,b) | @max | @print! # (a, b, ...) uredjena n-torka
+[a,b] | @max | @print! # [a, b, ...] uredjena n-torka
 
-if [a<b]:
+if a<b:
 
 
 [a < b] {"manje":"vece"} | @print! # [logiciki uslov] {ako da  : ako ne}
@@ -47,7 +47,7 @@ fun moja_funkcija [[a, b]]:void
 	<< a + b! #  << = return
 nuf
 
-while [true] 
+while true 
 	statement!
 elihw
 

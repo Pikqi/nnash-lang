@@ -44,6 +44,6 @@ pub fn main() !void {
 
     var parser = Parser.init(tokens, &arena);
     defer parser.deinit();
-    parser.parse();
+    try parser.parse();
     try parser.printAST(writer);
 }

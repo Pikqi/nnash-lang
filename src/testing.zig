@@ -38,7 +38,7 @@ test "parse AST 1" {
     defer parser.deinit();
     var buff: [1024]u8 = undefined;
 
-    parser.parse();
+    try parser.parse();
     const stdout = std.fs.File.stderr().writer(&buff);
     var writer = stdout.interface;
     try parser.printAST(&writer);

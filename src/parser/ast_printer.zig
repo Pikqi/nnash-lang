@@ -25,6 +25,8 @@ fn dumpSimple(writer: *Writer, item: *ast.TopSimpleItem, depth: usize) !void {
     try writeIndent(writer, depth);
     switch (item.*) {
         .varDeclaration => |vd| try dumpVarDeclaration(writer, vd, depth + 1),
+        .varDeclarationAsign => |vd| try dumpVarDeclarationAssign(writer, vd, depth + 1),
+        .assignStatement => |vd| try dumpAssignStatement(writer, vd, depth + 1),
         else => {
             unreachable;
         },
@@ -34,10 +36,83 @@ fn dumpSimple(writer: *Writer, item: *ast.TopSimpleItem, depth: usize) !void {
 fn dumpVarDeclaration(writer: *Writer, item: *ast.VarDeclaration, depth: usize) !void {
     try writer.print("VarDeclaration\n", .{});
     try writeIndent(writer, depth);
-    try writer.print("name: {s} type: {t} ", .{ item.ident, item.type });
+    try writer.print("name: {s} type: {t}\n", .{ item.ident, item.type });
+    // try writer.print("name: {s} type: {t} dimensions: {?any}", .{ item.ident, item.type, item.dimensions });
+}
+fn dumpAssignStatement(writer: *Writer, item: *ast.AssignStatement, depth: usize) !void {
+    try writer.print("AssignStatement\n", .{});
+    try writeIndent(writer, depth);
+    try writer.print("ident: {s}\n", .{item.ident});
+    try writeIndent(writer, depth);
+    try dumpExpression(writer, item.expr, depth + 1);
+}
+
+fn dumpVarDeclarationAssign(writer: *Writer, item: *ast.VarDeclarationAsign, depth: usize) !void {
+    try writer.print("VarDeclarationAssign\n", .{});
+    try writeIndent(writer, depth);
+    try dumpVarDeclaration(writer, item.varDeclaration, depth + 1);
+    try dumpExpression(writer, item.expr, depth + 1);
     // try writer.print("name: {s} type: {t} dimensions: {?any}", .{ item.ident, item.type, item.dimensions });
 }
 
+fn dumpExpression(writer: *Writer, item: *ast.Expression, depth: usize) !void {
+    try writer.print("Expression\n", .{});
+    try writeIndent(writer, depth);
+    switch (item.*) {
+        .aExpression => |aex| {
+            try writer.print("AExpression\n", .{});
+            const adepth = depth + 1;
+            try writeIndent(writer, adepth);
+            for (aex.muls) |mul| {
+                try writer.print("AExpression\n", .{});
+                try writeIndent(writer, adepth + 1);
+                try dumpMul(writer, mul, adepth + 2);
+            }
+        },
+        .callExpression => |cex| {
+            _ = cex; // autofix
+        },
+    }
+}
+fn dumpMul(writer: *Writer, item: *ast.Mul, depth: usize) !void {
+    try writer.print("Mul\n", .{});
+    try writeIndent(writer, depth);
+    try dumpUnary(writer, item.leftUnary, depth + 1);
+}
+
+fn dumpUnary(writer: *Writer, item: *ast.Unary, depth: usize) !void {
+    try writer.print("Unary\n", .{});
+    try writeIndent(writer, depth);
+    if (item.sign) |sign| {
+        _ = sign; // autofix
+        // try writer.print("{t} ", .{sign});
+    }
+    try dumpPower(writer, item.power, depth + 1);
+}
+
+fn dumpPower(writer: *Writer, item: *ast.Power, depth: usize) !void {
+    try writer.print("Power\n", .{});
+    try writeIndent(writer, depth);
+    try dumpPrimary(writer, item.primary, depth + 1);
+}
+
+fn dumpPrimary(writer: *Writer, item: *ast.Primary, depth: usize) anyerror!void {
+    try writer.print("Primary\n", .{});
+    try writeIndent(writer, depth);
+    switch (item.*) {
+        .expr => |ex| try dumpExpression(writer, ex, depth + 1),
+        .number => |n| {
+            try writer.print("Number\n", .{});
+            try writeIndent(writer, depth + 1);
+            switch (n) {
+                .int_lit => try writer.print("int: {d}", .{n.int_lit.value.?.int}),
+                .float_lit => try writer.print("float: {d}", .{n.float_lit.value.?.float}),
+                .ident => try writer.print("ident: {s}", .{n.float_lit.str.?}),
+            }
+            // try writer.print("{d}", : anytype)
+        },
+    }
+}
 fn dumpBlock(writer: *Writer, item: *ast.SomeBlock, depth: usize) !void {
     try writeIndent(writer, depth);
     _ = item; // autofix

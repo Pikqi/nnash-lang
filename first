@@ -1,0 +1,7 @@
+lvalue = IDENT
+call_expr = literal, IDENT, LPAREN
+call_expr_continue = IDENT, BUILTIN
+tuple = LPAREN
+args = LPAREN, expr
+
+expr = 
