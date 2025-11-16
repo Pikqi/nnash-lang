@@ -97,17 +97,17 @@ pub const PlusMinus = enum { PLUS, MINUS };
 pub const TimesDiv = enum { TIMES, DIV };
 pub const Mul = struct {
     leftUnary: *Unary,
-    operand: ?*TimesDiv,
-    rightUnary: ?*Unary,
+    operand: ?TimesDiv = null,
+    rightUnary: ?*Unary = null,
 };
 pub const Unary = struct {
-    sign: ?PlusMinus,
+    sign: ?PlusMinus = null,
     power: *Power,
 };
 
 pub const Power = struct {
     primary: *Primary,
-    pow: ?*Power,
+    pow: ?*Power = null,
 };
 
 pub const Primary = union(enum) {

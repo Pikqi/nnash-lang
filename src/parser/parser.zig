@@ -190,12 +190,24 @@ pub const Parser = struct {
         const ml = try self.alloc.create(ast.Mul);
         ml.leftUnary = try self.parseUnary();
 
+        ml.rightUnary = null;
+        ml.operand = null;
+
+        if (self.matchOneOf(&[_]TokenType{ .TIMES, .DIV })) |matched| {
+            ml.operand = switch (matched.type) {
+                .TIMES => .TIMES,
+                .DIV => .DIV,
+                else => unreachable,
+            };
+            ml.rightUnary = try self.parseUnary();
+        }
         return ml;
     }
 
     // unary = [ PLUS | MINUS ] power
     fn parseUnary(self: *Self) !*ast.Unary {
         const un = try self.alloc.create(ast.Unary);
+        un.sign = null;
         const matched = self.matchOneOf(&[_]TokenType{ .ADD, .SUB });
         if (matched) |plus_minus| {
             un.sign = lexemToPlusMinus(plus_minus) catch unreachable;
@@ -207,6 +219,7 @@ pub const Parser = struct {
     fn parsePower(self: *Self) !*ast.Power {
         const po = try self.alloc.create(ast.Power);
         po.primary = try self.parsePrimary();
+        po.pow = null;
 
         // TODO ADD PARSING POW IN LEXER
         if (self.match(.POW) != null) {
@@ -219,7 +232,9 @@ pub const Parser = struct {
         const pr = try self.alloc.create(ast.Primary);
         const matched = self.matchOneOf(&[_]TokenType{ .INT_LIT, .FLOAT_LIT, .IDENT });
         if (matched == null) {
+            _ = try self.consume(.LPAREN, "Expected (");
             pr.* = .{ .expr = try self.parseExpression() };
+            _ = try self.consume(.RPAREN, "Expected )");
         } else {
             switch (matched.?.type) {
                 .INT_LIT => {
@@ -235,12 +250,6 @@ pub const Parser = struct {
             }
         }
         return pr;
-    }
-    fn startsExpression(self: *Self) !bool {
-        if (self.checkLiteral()) {
-            return true;
-        }
-        return error.NotImplemented;
     }
 
     fn checkLiteral(self: *Self) bool {

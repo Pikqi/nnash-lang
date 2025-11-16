@@ -80,6 +80,13 @@ fn dumpMul(writer: *Writer, item: *ast.Mul, depth: usize) !void {
     try writer.print("Mul\n", .{});
     try writeIndent(writer, depth);
     try dumpUnary(writer, item.leftUnary, depth + 1);
+
+    if (item.operand) |operand| {
+        try writeIndent(writer, depth);
+        try writer.print("{t}\n", .{operand});
+        try writeIndent(writer, depth);
+        try dumpUnary(writer, item.rightUnary.?, depth + 1);
+    }
 }
 
 fn dumpUnary(writer: *Writer, item: *ast.Unary, depth: usize) !void {
