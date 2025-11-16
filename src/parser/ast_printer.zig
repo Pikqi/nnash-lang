@@ -62,11 +62,13 @@ fn dumpExpression(writer: *Writer, item: *ast.Expression, depth: usize) !void {
         .aExpression => |aex| {
             try writer.print("AExpression\n", .{});
             const adepth = depth + 1;
-            try writeIndent(writer, adepth);
-            for (aex.muls) |mul| {
-                try writer.print("AExpression\n", .{});
+            for (aex.muls, 0..) |mul, i| {
                 try writeIndent(writer, adepth + 1);
                 try dumpMul(writer, mul, adepth + 2);
+                if (i < aex.ops.len) {
+                    try writeIndent(writer, adepth + 1);
+                    try writer.print("{t}\n", .{aex.ops[i]});
+                }
             }
         },
         .callExpression => |cex| {
@@ -105,9 +107,9 @@ fn dumpPrimary(writer: *Writer, item: *ast.Primary, depth: usize) anyerror!void 
             try writer.print("Number\n", .{});
             try writeIndent(writer, depth + 1);
             switch (n) {
-                .int_lit => try writer.print("int: {d}", .{n.int_lit.value.?.int}),
-                .float_lit => try writer.print("float: {d}", .{n.float_lit.value.?.float}),
-                .ident => try writer.print("ident: {s}", .{n.float_lit.str.?}),
+                .int_lit => try writer.print("int: {d}\n", .{n.int_lit.value.?.int}),
+                .float_lit => try writer.print("float: {d}\n", .{n.float_lit.value.?.float}),
+                .ident => try writer.print("ident: {s}\n", .{n.float_lit.str.?}),
             }
             // try writer.print("{d}", : anytype)
         },
