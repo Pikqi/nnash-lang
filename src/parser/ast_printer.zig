@@ -27,9 +27,7 @@ fn dumpSimple(writer: *Writer, item: *ast.TopSimpleItem, depth: usize) !void {
         .varDeclaration => |vd| try dumpVarDeclaration(writer, vd, depth + 1),
         .varDeclarationAsign => |vd| try dumpVarDeclarationAssign(writer, vd, depth + 1),
         .assignStatement => |vd| try dumpAssignStatement(writer, vd, depth + 1),
-        else => {
-            unreachable;
-        },
+        .callExpression => |cex| try dumpCallExpression(writer, cex, depth + 1),
     }
 }
 
@@ -55,7 +53,7 @@ fn dumpVarDeclarationAssign(writer: *Writer, item: *ast.VarDeclarationAsign, dep
     // try writer.print("name: {s} type: {t} dimensions: {?any}", .{ item.ident, item.type, item.dimensions });
 }
 
-fn dumpExpression(writer: *Writer, item: *ast.Expression, depth: usize) !void {
+fn dumpExpression(writer: *Writer, item: *ast.Expression, depth: usize) anyerror!void {
     try writer.print("Expression\n", .{});
     try writeIndent(writer, depth);
     switch (item.*) {
@@ -72,8 +70,28 @@ fn dumpExpression(writer: *Writer, item: *ast.Expression, depth: usize) !void {
             }
         },
         .callExpression => |cex| {
-            _ = cex; // autofix
+            try dumpCallExpression(writer, cex, depth + 1);
         },
+    }
+}
+fn dumpCallExpression(writer: *Writer, item: *ast.CallExpression, depth: usize) !void {
+    try writer.print("CallExpression\n", .{});
+    try writeIndent(writer, depth);
+    try writer.print("args: \n", .{});
+    try dumpTuple(writer, item.args, depth + 1);
+    try writeIndent(writer, depth);
+    try dumpCallExpressionContinue(writer, item.callExpressionContinue, depth + 1);
+}
+
+fn dumpCallExpressionContinue(writer: *Writer, item: *ast.CallExpressionContinue, depth: usize) !void {
+    try writer.print("CallExpressionContinue\n", .{});
+    try writeIndent(writer, depth);
+    try writer.print("Function Name: {s}\n", .{item.name});
+    if (item.callExpressionContinue) |piped| {
+        try writeIndent(writer, depth);
+        try writer.print("Piped: \n", .{});
+        try writeIndent(writer, depth + 1);
+        try dumpCallExpressionContinue(writer, piped, depth + 2);
     }
 }
 fn dumpMul(writer: *Writer, item: *ast.Mul, depth: usize) !void {
@@ -93,8 +111,8 @@ fn dumpUnary(writer: *Writer, item: *ast.Unary, depth: usize) !void {
     try writer.print("Unary\n", .{});
     try writeIndent(writer, depth);
     if (item.sign) |sign| {
-        _ = sign; // autofix
-        // try writer.print("{t} ", .{sign});
+        try writer.print("SIGN: {t}\n", .{sign});
+        try writeIndent(writer, depth);
     }
     try dumpPower(writer, item.power, depth + 1);
 }
@@ -120,6 +138,15 @@ fn dumpPrimary(writer: *Writer, item: *ast.Primary, depth: usize) anyerror!void 
             }
             // try writer.print("{d}", : anytype)
         },
+    }
+}
+fn dumpTuple(writer: *Writer, item: *ast.Tuple, depth: usize) !void {
+    try writeIndent(writer, depth);
+    try writer.print("Tuple\n", .{});
+
+    for (item.exprs) |ex| {
+        try writeIndent(writer, depth + 1);
+        try dumpExpression(writer, ex, depth + 2);
     }
 }
 fn dumpBlock(writer: *Writer, item: *ast.SomeBlock, depth: usize) !void {

@@ -38,7 +38,7 @@ call_expr      = args PIPE call_expr_continue
 call_expr_continue = (IDENT | BUILTIN_FUN) (PIPE call_expr_continue)?;
 
 tuple					 = LBRACKET expr { COMMA expr }  RBRACKET ;
-args					 = tuple 
+args					 = tuple | call_expr
 
 expr           = aexpr | call_expr ;
 aexpr          = add ;
@@ -57,7 +57,7 @@ literal        = VOID_LIT | INT_LIT | FLOAT_LIT | STRING_LIT
 
 print(max((a,b)))
 
-(a,b) | @max | @print! # (a, b, ...) uredjena n-torka
+[a,b] | @max | @print! # (a, b, ...) uredjena n-torka
 
 expr
 	call_expr

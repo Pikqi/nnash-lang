@@ -85,10 +85,11 @@ pub const Parser = struct {
         return ti;
     }
 
-    // top_simple = (var_decl | var_decl_assign | assign_stmt) STATMENT_END;
+    // top_simple = (var_decl | var_decl_assign | assign_stmt | call_expr) STATMENT_END;
     // var_decl       = type COLON (IDENT | IDENT array_dims)
     // var_decl_assign= expr ASSIGN var_decl
     // assign_stmt    = expr ASSIGN lvalue ;
+    // call_expr      = args PIPE call_expr_continue
     fn topSimple(self: *Self) !*ast.TopSimpleItem {
         const ts = try self.alloc.create(ast.TopSimpleItem);
         if (self.matchType() != null) {
@@ -112,11 +113,14 @@ pub const Parser = struct {
                 ts.* = .{ .assignStatement = as };
             }
         } else {
-            return error.NotImplemented;
+            // this must be a call expression without asignment?
+            if (ex.* != .callExpression) {
+                self.reportError("Non CallExpression hanging without assignment");
+            }
+            ts.* = .{ .callExpression = ex.callExpression };
         }
         _ = try self.consume(.STATMENT_END, "Expected !");
 
-        std.debug.print("ts: {any}", .{ts});
         return ts;
     }
     // var_decl = type COLON (IDENT | IDENT array_dims)
@@ -160,11 +164,55 @@ pub const Parser = struct {
         const ex = try self.alloc.create(ast.Expression);
         // tuple
         if (self.check(.LBRACKET)) {
-            self.reportError("Not implemented tuple");
-            return error.NotImplemented;
+            ex.* = .{ .callExpression = try self.callExpression() };
+        } else {
+            ex.* = .{ .aExpression = try self.parseAExpression() };
         }
-        ex.* = .{ .aExpression = try self.parseAExpression() };
         return ex;
+    }
+
+    // tuple = LBRACKET expr { COMMA expr }  RBRACKET ;
+    fn parseTuple(self: *Self) !*ast.Tuple {
+        _ = try self.consume(.LBRACKET, "Expected ");
+        const tuple = try self.alloc.create(ast.Tuple);
+        var exprs = try ArrayList(*ast.Expression).initCapacity(self.alloc, 5);
+        try exprs.append(self.alloc, try self.parseExpression());
+
+        while (self.match(.RBRACKET) == null) {
+            _ = try self.consume(.COMMA, "Expected ,");
+            try exprs.append(self.alloc, try self.parseExpression());
+        }
+        tuple.exprs = try exprs.toOwnedSlice(self.alloc);
+        return tuple;
+    }
+
+    // [1, 2] | @max | @print!
+
+    // call_expr      = tuple PIPE call_expr_continue
+    fn callExpression(self: *Self) !*ast.CallExpression {
+        const cex = try self.alloc.create(ast.CallExpression);
+        const tuple = try self.parseTuple();
+        cex.args = tuple;
+        _ = try self.consume(.PIPE, "Expected | after tuple");
+        cex.callExpressionContinue = try self.callExpressionContinue();
+        return cex;
+    }
+
+    // call_expr_continue = (IDENT | BUILTIN_FUN) (PIPE call_expr_continue)?;
+    fn callExpressionContinue(self: *Self) !*ast.CallExpressionContinue {
+        const cexc = try self.alloc.create(ast.CallExpressionContinue);
+        cexc.callExpressionContinue = null;
+
+        const matched = self.matchOneOf(&[_]TokenType{ .IDENT, .BUILTIN_FUN });
+        if (matched == null) {
+            self.reportError("Expected ident or builtin funciton");
+            return error.SyntaxError;
+        }
+        cexc.name = try self.alloc.dupe(u8, matched.?.str.?);
+        if (self.match(.PIPE) != null) {
+            cexc.callExpressionContinue = try self.callExpressionContinue();
+        }
+        return cexc;
     }
 
     // add = mul { ( PLUS | MINUS ) mul };

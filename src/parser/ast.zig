@@ -128,4 +128,16 @@ pub const Grouping = struct {
 
 pub const ArtihOp = struct {};
 
-pub const CallExpression = struct {};
+pub const CallExpression = struct {
+    args: *Tuple,
+    callExpressionContinue: *CallExpressionContinue,
+};
+
+pub const CallExpressionContinue = struct {
+    name: []u8,
+    callExpressionContinue: ?*CallExpressionContinue,
+};
+
+pub const Tuple = struct {
+    exprs: []*Expression,
+};
