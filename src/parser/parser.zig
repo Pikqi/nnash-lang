@@ -106,10 +106,10 @@ pub const Parser = struct {
                 ts.* = .{ .varDeclarationAsign = try self.alloc.create(ast.VarDeclarationAsign) };
                 ts.varDeclarationAsign.expr = ex;
                 ts.varDeclarationAsign.varDeclaration = vd;
-            } else if (self.match(.IDENT)) |matched| {
+            } else if (self.check(.IDENT)) {
                 const as = try self.alloc.create(ast.AssignStatement);
                 as.expr = ex;
-                as.ident = try self.alloc.dupe(u8, matched.str.?);
+                as.lvalue = try self.lvalue();
                 ts.* = .{ .assignStatement = as };
             }
         } else {
@@ -122,6 +122,14 @@ pub const Parser = struct {
         _ = try self.consume(.STATMENT_END, "Expected !");
 
         return ts;
+    }
+    fn lvalue(self: *Self) !ast.LValue {
+        const ident = try self.consume(.IDENT, "Expected Identifier");
+        const ident_str = try self.alloc.dupe(u8, ident.str.?);
+        return .{
+            .ident = ident_str,
+            .index = if (self.check(.LBRACKET)) try self.parseTuple() else null,
+        };
     }
     // var_decl = type COLON (IDENT | IDENT array_dims)
     fn varDeclaration(self: *Self) !*ast.VarDeclaration {
@@ -155,7 +163,7 @@ pub const Parser = struct {
     fn asignStatement(self: *Self) !*ast.AssignStatement {
         const as = try self.alloc.create(ast.AssignStatement);
         as.expr = try self.parseExpression();
-        as.ident = try self.consume(.IDENT, "Expected ident");
+        as.lvalue = try self.lvalue();
         return as;
     }
 

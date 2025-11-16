@@ -5,4 +5,4 @@ int:i!
 -1 + 3 * 2 >>i!
 
 [1, 2] | @max!
-[1, 2] | @max | print | some_other_function >> lval!
+[1, 2] | @max | print | some_other_function >> lval[0]!

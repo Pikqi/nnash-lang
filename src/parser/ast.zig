@@ -78,7 +78,11 @@ pub const CallMaybeAssign = struct {};
 
 pub const AssignStatement = struct {
     expr: *Expression,
+    lvalue: LValue,
+};
+pub const LValue = struct {
     ident: []u8,
+    index: ?*Tuple,
 };
 
 pub const ReturnStatement = struct {};

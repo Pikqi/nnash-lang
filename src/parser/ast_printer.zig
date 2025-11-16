@@ -40,9 +40,19 @@ fn dumpVarDeclaration(writer: *Writer, item: *ast.VarDeclaration, depth: usize) 
 fn dumpAssignStatement(writer: *Writer, item: *ast.AssignStatement, depth: usize) !void {
     try writer.print("AssignStatement\n", .{});
     try writeIndent(writer, depth);
-    try writer.print("ident: {s}\n", .{item.ident});
+    try dumpLValue(writer, item.lvalue, depth + 1);
     try writeIndent(writer, depth);
     try dumpExpression(writer, item.expr, depth + 1);
+}
+
+fn dumpLValue(writer: *Writer, item: ast.LValue, depth: usize) !void {
+    try writer.print("LValue\n", .{});
+    try writeIndent(writer, depth);
+    try writer.print("Id: {s}\n", .{item.ident});
+    if (item.index) |index| {
+        try writeIndent(writer, depth);
+        try dumpTuple(writer, index, depth + 1);
+    }
 }
 
 fn dumpVarDeclarationAssign(writer: *Writer, item: *ast.VarDeclarationAsign, depth: usize) !void {
@@ -78,6 +88,7 @@ fn dumpCallExpression(writer: *Writer, item: *ast.CallExpression, depth: usize) 
     try writer.print("CallExpression\n", .{});
     try writeIndent(writer, depth);
     try writer.print("args: \n", .{});
+    try writeIndent(writer, depth);
     try dumpTuple(writer, item.args, depth + 1);
     try writeIndent(writer, depth);
     try dumpCallExpressionContinue(writer, item.callExpressionContinue, depth + 1);
@@ -141,11 +152,10 @@ fn dumpPrimary(writer: *Writer, item: *ast.Primary, depth: usize) anyerror!void 
     }
 }
 fn dumpTuple(writer: *Writer, item: *ast.Tuple, depth: usize) !void {
-    try writeIndent(writer, depth);
     try writer.print("Tuple\n", .{});
 
     for (item.exprs) |ex| {
-        try writeIndent(writer, depth + 1);
+        try writeIndent(writer, depth);
         try dumpExpression(writer, ex, depth + 2);
     }
 }
