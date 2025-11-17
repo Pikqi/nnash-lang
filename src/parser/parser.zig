@@ -172,7 +172,12 @@ pub const Parser = struct {
         const ex = try self.alloc.create(ast.Expression);
         // tuple
         if (self.check(.LBRACKET)) {
-            ex.* = .{ .callExpression = try self.callExpression() };
+            const tuple = try self.parseTuple();
+            if (self.check(.PIPE)) {
+                ex.* = .{ .callExpression = try self.callExpression(tuple) };
+            } else {
+                ex.* = .{ .tupleExpression = tuple };
+            }
         } else {
             ex.* = .{ .aExpression = try self.parseAExpression() };
         }
@@ -197,9 +202,9 @@ pub const Parser = struct {
     // [1, 2] | @max | @print!
 
     // call_expr      = tuple PIPE call_expr_continue
-    fn callExpression(self: *Self) !*ast.CallExpression {
+    fn callExpression(self: *Self, tuple_opt: ?*ast.Tuple) !*ast.CallExpression {
         const cex = try self.alloc.create(ast.CallExpression);
-        const tuple = try self.parseTuple();
+        const tuple = if (tuple_opt) |t| t else try self.parseTuple();
         cex.args = tuple;
         _ = try self.consume(.PIPE, "Expected | after tuple");
         cex.callExpressionContinue = try self.callExpressionContinue();

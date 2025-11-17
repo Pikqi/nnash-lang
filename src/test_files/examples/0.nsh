@@ -5,4 +5,6 @@ int:i!
 -1 + 3 * 2 >>i!
 
 [1, 2] | @max!
-[1, 2] | @max | print | some_other_function >> lval[0]!
+([1, 2] | @max | print | some_other_function) + 3 >> lval[0]!
+
+[([void] | funk1), ([0] | sqrt)] >> lval!

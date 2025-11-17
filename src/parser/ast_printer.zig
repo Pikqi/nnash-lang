@@ -82,6 +82,10 @@ fn dumpExpression(writer: *Writer, item: *ast.Expression, depth: usize) anyerror
         .callExpression => |cex| {
             try dumpCallExpression(writer, cex, depth + 1);
         },
+
+        .tupleExpression => |tuple| {
+            try dumpTuple(writer, tuple, depth + 1);
+        },
     }
 }
 fn dumpCallExpression(writer: *Writer, item: *ast.CallExpression, depth: usize) !void {
@@ -145,7 +149,7 @@ fn dumpPrimary(writer: *Writer, item: *ast.Primary, depth: usize) anyerror!void 
             switch (n) {
                 .int_lit => try writer.print("int: {d}\n", .{n.int_lit.value.?.int}),
                 .float_lit => try writer.print("float: {d}\n", .{n.float_lit.value.?.float}),
-                .ident => try writer.print("ident: {s}\n", .{n.float_lit.str.?}),
+                .ident => try writer.print("ident: {s}\n", .{n.ident.str.?}),
             }
             // try writer.print("{d}", : anytype)
         },

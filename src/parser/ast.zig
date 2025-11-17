@@ -92,6 +92,7 @@ pub const Condition = struct {};
 pub const Expression = union(enum) {
     aExpression: *AExpression,
     callExpression: *CallExpression,
+    tupleExpression: *Tuple,
 };
 pub const AExpression = struct {
     muls: []*Mul,
