@@ -163,8 +163,12 @@ pub const Lexer = struct {
                 _ = self.sc.advanceUntil('\n');
             },
             '"' => {
+                const string_start = self.sc.curr;
                 if (self.sc.matchUntil('"')) {
-                    try self.add(.STRING_LIT);
+                    var lexem = self.getLexemFromType(.STRING_LIT);
+                    lexem.str = self.sc.source[string_start .. self.sc.curr - 1];
+
+                    try self.lexems.append(self.allocator, lexem);
                 } else {
                     return LexerError.StringLiteralNotFinished;
                 }
@@ -372,8 +376,8 @@ test "Lexer string literals not terminated error" {
 }
 
 test "Lexer keywords" {
-    const input = "while elihw fun nuf int string boole float true false if fi i_am_not_a_keyword ";
-    const expected_lexem_types = [_]TokenType{ .WHILE, .ENDWHILE, .FUN_DEC, .END_FUN_DEC, .INT, .STRING, .BOOL, .FLOAT, .TRUE_LIT, .FALSE_LIT, .IF, .END_IF, .IDENT };
+    const input = "while elihw fun nuf int string boole float true false if fi \"some_string_literal\" i_am_not_a_keyword ";
+    const expected_lexem_types = [_]TokenType{ .WHILE, .ENDWHILE, .FUN_DEC, .END_FUN_DEC, .INT, .STRING, .BOOL, .FLOAT, .TRUE_LIT, .FALSE_LIT, .IF, .END_IF, .STRING_LIT, .IDENT };
     var lexer = try Lexer.init(input, std.testing.allocator);
     try lexer.scanTokens();
     try std.testing.expectEqual(expected_lexem_types.len, lexer.lexems.items.len);
@@ -381,6 +385,7 @@ test "Lexer keywords" {
     for (lexer.lexems.items, expected_lexem_types) |my_lexem, expected_lexem| {
         try std.testing.expectEqual(expected_lexem, my_lexem.type);
     }
+    try std.testing.expectEqualStrings("some_string_literal", lexer.lexems.items[12].str.?);
     try std.testing.expectEqualStrings("i_am_not_a_keyword", lexer.lexems.getLast().str.?);
 
     defer lexer.deinit();
