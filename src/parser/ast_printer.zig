@@ -143,13 +143,14 @@ fn dumpPrimary(writer: *Writer, item: *ast.Primary, depth: usize) anyerror!void 
     try writeIndent(writer, depth);
     switch (item.*) {
         .expr => |ex| try dumpExpression(writer, ex, depth + 1),
-        .number => |n| {
+        .primaryToken => |n| {
             try writer.print("Number\n", .{});
             try writeIndent(writer, depth + 1);
             switch (n) {
                 .int_lit => try writer.print("int: {d}\n", .{n.int_lit.value.?.int}),
                 .float_lit => try writer.print("float: {d}\n", .{n.float_lit.value.?.float}),
                 .ident => try writer.print("ident: {s}\n", .{n.ident.str.?}),
+                .str_lit => try writer.print("str_lit: {s}\n", .{n.str_lit.str.?}),
             }
             // try writer.print("{d}", : anytype)
         },

@@ -116,13 +116,14 @@ pub const Power = struct {
 };
 
 pub const Primary = union(enum) {
-    number: Number,
+    primaryToken: PrimaryToken,
     expr: *Expression,
 };
-pub const Number = union(enum) {
+pub const PrimaryToken = union(enum) {
     ident: Lexem,
     int_lit: Lexem,
     float_lit: Lexem,
+    str_lit: Lexem,
 };
 
 pub const Literal = enum {};

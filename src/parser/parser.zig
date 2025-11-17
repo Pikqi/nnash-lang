@@ -291,7 +291,7 @@ pub const Parser = struct {
 
     fn parsePrimary(self: *Self) !*ast.Primary {
         const pr = try self.alloc.create(ast.Primary);
-        const matched = self.matchOneOf(&[_]TokenType{ .INT_LIT, .FLOAT_LIT, .IDENT });
+        const matched = self.matchOneOf(&[_]TokenType{ .INT_LIT, .FLOAT_LIT, .IDENT, .STRING_LIT });
         if (matched == null) {
             _ = try self.consume(.LPAREN, "Expected (");
             pr.* = .{ .expr = try self.parseExpression() };
@@ -299,13 +299,16 @@ pub const Parser = struct {
         } else {
             switch (matched.?.type) {
                 .INT_LIT => {
-                    pr.* = .{ .number = .{ .int_lit = matched.? } };
+                    pr.* = .{ .primaryToken = .{ .int_lit = matched.? } };
                 },
                 .FLOAT_LIT => {
-                    pr.* = .{ .number = .{ .float_lit = matched.? } };
+                    pr.* = .{ .primaryToken = .{ .float_lit = matched.? } };
                 },
                 .IDENT => {
-                    pr.* = .{ .number = .{ .ident = matched.? } };
+                    pr.* = .{ .primaryToken = .{ .ident = matched.? } };
+                },
+                .STRING_LIT => {
+                    pr.* = .{ .primaryToken = .{ .str_lit = matched.? } };
                 },
                 else => unreachable,
             }
