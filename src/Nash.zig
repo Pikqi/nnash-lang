@@ -11,7 +11,7 @@ file_contents: []const u8,
 
 const Self = @This();
 
-pub fn parseFile(file_path: []const u8, alloc: std.mem.Allocator) !Self {
+pub fn parseFile(file_path: []const u8, alloc: std.mem.Allocator, writer: ?*std.Io.Writer) !Self {
     const file = try std.fs.cwd().openFile(file_path, .{ .mode = .read_only });
     const contents = try file.readToEndAlloc(alloc, 1024 * 1024 * 4);
 
@@ -26,6 +26,13 @@ pub fn parseFile(file_path: []const u8, alloc: std.mem.Allocator) !Self {
 
     var parser = try Parser.init(tokens, alloc);
 
+    errdefer {
+        if (writer) |w| {
+            parser.print_error_msg(w, contents) catch {};
+        }
+        parser.deinit();
+        alloc.free(tokens);
+    }
     try parser.parse();
     return .{
         .lexer = lexer,

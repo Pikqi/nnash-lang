@@ -47,7 +47,10 @@ fn dumpVarDeclaration(writer: *Writer, item: ast.VarDeclaration, depth: usize) !
     try writer.print("VarDeclaration\n", .{});
     try writeIndent(writer, depth);
     try writer.print("name: {s} type: {t}\n", .{ item.ident, item.type });
-    // try writer.print("name: {s} type: {t} dimensions: {?any}", .{ item.ident, item.type, item.dimensions });
+    if (item.dimensions) |dim| {
+        try writeIndent(writer, depth);
+        try writer.print("dimensions: {any}", .{dim});
+    }
 }
 fn dumpAssignStatement(writer: *Writer, item: ast.AssignStatement, depth: usize) !void {
     try writer.print("AssignStatement\n", .{});
@@ -162,6 +165,7 @@ fn dumpPrimary(writer: *Writer, item: ast.Primary, depth: usize) anyerror!void {
                 .ident => try writer.print("ident: {s}\n", .{n.ident.str.?}),
                 .str_lit => try writer.print("str_lit: {s}\n", .{n.str_lit.str.?}),
                 .bool_lit => try writer.print("bool: {any}\n", .{n.bool_lit.type == .TRUE_LIT}),
+                .void_lit => try writer.print("void\n", .{}),
             }
             // try writer.print("{d}", : anytype)
         },

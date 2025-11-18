@@ -27,7 +27,13 @@ pub fn main() !void {
         return;
     }
 
-    var nash = try nnash.Nash.parseFile(file_name, alloc);
+    var nash = nnash.Nash.parseFile(file_name, alloc, writer) catch |e| {
+        try writer.print("{t}", .{e});
+        try writer.flush();
+
+        return;
+    };
+    try nash.parser.print_error_msg(writer, nash.file_contents);
     try nash.parser.printAST(writer);
     defer nash.deinit();
 }

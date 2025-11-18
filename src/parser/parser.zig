@@ -19,9 +19,11 @@ pub const Parser = struct {
     current: usize = 0,
     arena: *ArenaAllocator,
     program: ?ast.Program = null,
+    erorr_token: ?Lexem = null,
+    error_msg: ?[]u8 = null,
     fn reportError(self: *Self, msg: []const u8) void {
-        std.log.err("{s}\n", .{msg});
-        std.log.err("At token {any}", .{self.peek()});
+        self.error_msg = std.fmt.allocPrint(self.arena.allocator(), "{s}\nAt token {any}\n", .{ msg, self.peek() }) catch unreachable;
+        self.erorr_token = self.peek();
     }
 
     const Self = @This();
@@ -39,6 +41,28 @@ pub const Parser = struct {
         const allocator = self.arena.child_allocator;
         self.arena.deinit();
         allocator.destroy(self.arena);
+    }
+    pub fn print_error_msg(self: *const Self, writer: *std.Io.Writer, source: []const u8) !void {
+        if (self.error_msg) |msg| {
+            try writer.writeAll(msg);
+        }
+        if (self.erorr_token == null) return;
+
+        var a = std.mem.splitAny(u8, source, "\n");
+        var line: []const u8 = undefined;
+        for (0..self.erorr_token.?.line) |_| {
+            line = a.next().?;
+        }
+        const token = self.erorr_token.?;
+        const line_dupe = try self.arena.allocator().dupe(u8, line);
+        defer self.arena.allocator().free(line_dupe);
+        std.mem.replaceScalar(u8, line_dupe, '\t', ' ');
+        try writer.print("{s}\n", .{line_dupe});
+        for (0..token.col_start - 1) |_| {
+            try writer.print(" ", .{});
+        }
+        try writer.print("^\n", .{});
+        try writer.flush();
     }
     pub fn printAST(self: *const Self, writer: *std.Io.Writer) !void {
         if (self.program == null) {
@@ -272,6 +296,18 @@ pub const Parser = struct {
         const vd_type = try lexemToType(type_lexem.?);
 
         _ = self.advance(); // consume type
+        var dimensions: ?[]usize = null;
+        if (self.match(.LBRACKET)) |_| {
+            var dimensions_list = try std.ArrayList(usize).initCapacity(self.arena.allocator(), 4);
+            while (!self.check(.RBRACKET)) {
+                if (self.match(.INT_LIT)) |int_lit| {
+                    try dimensions_list.append(self.arena.allocator(), int_lit.value.?.int);
+                    _ = self.match(.COMMA);
+                }
+            }
+            dimensions = try dimensions_list.toOwnedSlice(self.arena.allocator());
+            _ = self.advance(); // consumes ]
+        }
         _ = try self.consume(.COLON, "Expected : after type");
         const ident_token = try self.consume(.IDENT, "Expected identifier");
 
@@ -279,7 +315,11 @@ pub const Parser = struct {
             self.reportError("Array dims not implemented");
             return error.SyntaxError;
         }
-        return .{ .type = vd_type, .ident = try self.arena.allocator().dupe(u8, ident_token.str.?) };
+        return .{
+            .type = vd_type,
+            .ident = try self.arena.allocator().dupe(u8, ident_token.str.?),
+            .dimensions = dimensions,
+        };
     }
     // assign_stmt    = expr ASSIGN lvalue ;
     fn asignStatement(self: *Self) !*ast.AssignStatement {
@@ -405,7 +445,7 @@ pub const Parser = struct {
 
     fn parsePrimary(self: *Self) !ast.Primary {
         var pr: ast.Primary = undefined;
-        const matched = self.matchOneOf(&[_]TokenType{ .INT_LIT, .FLOAT_LIT, .IDENT, .STRING_LIT, .TRUE_LIT, .FALSE_LIT });
+        const matched = self.matchOneOf(&[_]TokenType{ .INT_LIT, .FLOAT_LIT, .IDENT, .STRING_LIT, .TRUE_LIT, .FALSE_LIT, .VOID_LIT });
         if (matched == null) {
             _ = try self.consume(.LPAREN, "Expected (");
             pr = .{ .expr = try self.parseExpression() };
@@ -427,6 +467,9 @@ pub const Parser = struct {
             },
             .TRUE_LIT, .FALSE_LIT => {
                 pr = .{ .primaryToken = .{ .bool_lit = matched.? } };
+            },
+            .VOID_LIT => {
+                pr = .{ .primaryToken = .{ .void_lit = matched.? } };
             },
 
             else => unreachable,

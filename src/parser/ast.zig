@@ -62,7 +62,7 @@ pub const TopSimpleItem = union(enum) {
 pub const VarDeclaration = struct {
     type: Types,
     ident: []const u8,
-    // dimensions: ?[]usize = null,
+    dimensions: ?[]usize = null,
 };
 
 pub const VarDeclarationAsign = struct {
@@ -139,6 +139,7 @@ pub const PrimaryToken = union(enum) {
     float_lit: Lexem,
     str_lit: Lexem,
     bool_lit: Lexem,
+    void_lit: Lexem,
 };
 
 pub const Literal = enum {};
