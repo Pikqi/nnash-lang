@@ -21,8 +21,8 @@ pub const Parser = struct {
     alloc: Allocator,
     program: ?ast.Program = null,
     fn reportError(self: *Self, msg: []const u8) void {
-        _ = self; // autofix
-        std.debug.print("{s}", .{msg});
+        std.log.err("{s}\n", .{msg});
+        std.log.err("At token {any}", .{self.peek()});
     }
 
     const Self = @This();
@@ -46,7 +46,7 @@ pub const Parser = struct {
     pub fn parse(self: *Self) !void {
         self.program = .{
             // todo
-            .top_items = ArrayList(*ast.TopItem).initCapacity(self.alloc, 20) catch unreachable,
+            .top_items = ArrayList(ast.TopItem).initCapacity(self.alloc, 20) catch unreachable,
         };
         errdefer {
             const stdout = std.fs.File.stdout();
@@ -59,30 +59,84 @@ pub const Parser = struct {
 
     fn parseProgram(self: *Self) !void {
         while (!self.isAtEnd()) {
-            try self.program.?.top_items.append(self.alloc, try self.topItem());
+            try self.program.?.top_items.append(self.alloc, try self.topItem(false));
         }
     }
 
-    fn topItem(self: *Self) !*ast.TopItem {
-        const ti = try self.alloc.create(ast.TopItem);
+    fn returnStatement(self: *Self) !ast.ReturnStatement {
+        _ = try self.consume(.RETURN, "Expected <<");
+        if (self.check(.VOID_LIT) or self.check(.STATMENT_END)) {
+            _ = self.match(.VOID_LIT);
+            return .{ .void = {} };
+        }
+        return .{ .expression = try self.parseExpression() };
+    }
+    fn topItem(self: *Self, in_block: bool) !ast.TopItem {
         switch (self.peek().type) {
+            .RETURN => {
+                if (in_block) {
+                    const ti: ast.TopItem = .{ .simple = .{ .returnStatement = try self.returnStatement() } };
+                    _ = try self.consume(.STATMENT_END, "Exprected ! after return");
+                    return ti;
+                } else {
+                    self.reportError("Cant return from here");
+                    return error.SyntaxError;
+                }
+            },
             .FUN_DEC => {
                 // todo function declaration
                 return error.NotImplemented;
             },
             .WHILE => {
-                // todo while block
-                return error.NotImplemented;
+                return .{ .block = .{ .whileBlock = try self.whileBlock() } };
             },
             .IF => {
                 // todo while block
                 return error.NotImplemented;
             },
             else => {
-                ti.* = .{ .simple = try self.topSimple() };
+                return .{ .simple = try self.topSimple() };
             },
         }
-        return ti;
+    }
+    fn whileBlock(self: *Self) anyerror!*ast.WhileBlock {
+        _ = try self.consume(.WHILE, "Expected while");
+        const while_block = try self.alloc.create(ast.WhileBlock);
+        _ = try self.consume(.LBRACKET, "Expected [");
+
+        while_block.condition = try self.cond();
+        _ = try self.consume(.RBRACKET, "Expected ]");
+
+        var statements = try ArrayList(ast.TopItem).initCapacity(self.alloc, 10);
+        while (!self.check(.ENDWHILE)) {
+            try statements.append(self.alloc, try self.topItem(true));
+        }
+        while_block.blockStatements = try statements.toOwnedSlice(self.alloc);
+
+        _ = self.advance(); // consume endwhile
+
+        return while_block;
+    }
+
+    fn cond(self: *Self) !*ast.Condition {
+        const condition = try self.alloc.create(ast.Condition);
+        if (self.matchOneOf(&[_]TokenType{ .TRUE_LIT, .FALSE_LIT })) |matched| {
+            condition.* = .{ .literal = matched.type == .TRUE_LIT };
+            return condition;
+        }
+        var expressions = try ArrayList(*ast.Expression).initCapacity(self.alloc, 10);
+        var operators = try ArrayList(ast.RelOperator).initCapacity(self.alloc, 9);
+        try expressions.append(self.alloc, try self.parseExpression());
+        while (self.matchOneOf(&[_]TokenType{ .LT, .LE, .GT, .GE, .EQ, .NEQ })) |matched| {
+            try operators.append(self.alloc, lexemToRelOperator(matched) catch unreachable);
+            try expressions.append(self.alloc, try self.parseExpression());
+        }
+        condition.* = .{ .nested = .{
+            .expressions = try expressions.toOwnedSlice(self.alloc),
+            .operator = try operators.toOwnedSlice(self.alloc),
+        } };
+
+        return condition;
     }
 
     // top_simple = (var_decl | var_decl_assign | assign_stmt | call_expr) STATMENT_END;
@@ -90,38 +144,44 @@ pub const Parser = struct {
     // var_decl_assign= expr ASSIGN var_decl
     // assign_stmt    = expr ASSIGN lvalue ;
     // call_expr      = args PIPE call_expr_continue
-    fn topSimple(self: *Self) !*ast.TopSimpleItem {
-        const ts = try self.alloc.create(ast.TopSimpleItem);
-        if (self.matchType() != null) {
-            ts.* = .{ .varDeclaration = try self.varDeclaration() };
-            _ = try self.consume(.STATMENT_END, "Expected !");
-            return ts;
+    fn topSimple(self: *Self) !ast.TopSimpleItem {
+
+        // VarDecl
+        if (self.checkType()) {
+            const vd = try self.varDeclaration();
+            _ = try self.consume(.STATMENT_END, "Exprected !");
+            return .{ .varDeclaration = vd };
         }
         const ex = try self.parseExpression();
-        // assign_stmt | var_decl_assign
-        if (self.match(.ASSIGN) != null) {
-            // var_decl_assign
-            if (self.matchType() != null) {
+        if (self.match(.ASSIGN)) |_| {
+            // VarDeclAssign
+            if (self.checkType()) {
                 const vd = try self.varDeclaration();
-                ts.* = .{ .varDeclarationAsign = try self.alloc.create(ast.VarDeclarationAsign) };
-                ts.varDeclarationAsign.expr = ex;
-                ts.varDeclarationAsign.varDeclaration = vd;
-            } else if (self.check(.IDENT)) {
-                const as = try self.alloc.create(ast.AssignStatement);
-                as.expr = ex;
-                as.lvalue = try self.lvalue();
-                ts.* = .{ .assignStatement = as };
+                _ = try self.consume(.STATMENT_END, "Exprected !");
+                return .{ .varDeclarationAsign = .{
+                    .expr = ex,
+                    .varDeclaration = vd,
+                } };
             }
-        } else {
-            // this must be a call expression without asignment?
-            if (ex.* != .callExpression) {
-                self.reportError("Non CallExpression hanging without assignment");
-            }
-            ts.* = .{ .callExpression = ex.callExpression };
+            // Assign
+            const lval = try self.lvalue();
+            _ = try self.consume(.STATMENT_END, "Exprected !");
+            return .{ .assignStatement = .{
+                .expr = ex,
+                .lvalue = lval,
+            } };
         }
-        _ = try self.consume(.STATMENT_END, "Expected !");
+        if (self.check(.RETURN)) {
+            const ret: ast.TopSimpleItem = .{ .returnStatement = try self.returnStatement() };
+            _ = try self.consume(.STATMENT_END, "Exprected !");
+            return ret;
+        }
 
-        return ts;
+        if (ex.* != .callExpression) {
+            return error.SyntaxError;
+        }
+        _ = try self.consume(.STATMENT_END, "Exprected !");
+        return .{ .callExpression = ex.callExpression };
     }
     fn lvalue(self: *Self) !ast.LValue {
         const ident = try self.consume(.IDENT, "Expected Identifier");
@@ -291,7 +351,7 @@ pub const Parser = struct {
 
     fn parsePrimary(self: *Self) !*ast.Primary {
         const pr = try self.alloc.create(ast.Primary);
-        const matched = self.matchOneOf(&[_]TokenType{ .INT_LIT, .FLOAT_LIT, .IDENT, .STRING_LIT });
+        const matched = self.matchOneOf(&[_]TokenType{ .INT_LIT, .FLOAT_LIT, .IDENT, .STRING_LIT, .TRUE_LIT, .FALSE_LIT });
         if (matched == null) {
             _ = try self.consume(.LPAREN, "Expected (");
             pr.* = .{ .expr = try self.parseExpression() };
@@ -310,6 +370,10 @@ pub const Parser = struct {
                 .STRING_LIT => {
                     pr.* = .{ .primaryToken = .{ .str_lit = matched.? } };
                 },
+                .TRUE_LIT, .FALSE_LIT => {
+                    pr.* = .{ .primaryToken = .{ .bool_lit = matched.? } };
+                },
+
                 else => unreachable,
             }
         }
@@ -352,8 +416,13 @@ pub const Parser = struct {
         }
         return null;
     }
+
+    fn checkType(self: *Self) bool {
+        return self.check(.INT) or self.check(.STRING) or self.check(.BOOL) or self.check(.FLOAT) or self.check(.VOID_LIT);
+    }
+
     fn matchType(self: *Self) ?Lexem {
-        if (self.check(.INT) or self.check(.STRING) or self.check(.BOOL) or self.check(.FLOAT) or self.check(.VOID_LIT)) {
+        if (self.checkType()) {
             return self.peek();
         }
         return null;
@@ -388,6 +457,18 @@ pub const Parser = struct {
         return self.current == self.tokens.len;
     }
 };
+fn lexemToRelOperator(lexem: Lexem) !ast.RelOperator {
+    return switch (lexem.type) {
+        .LT => .LT,
+        .LE => .LE,
+        .GT => .GT,
+        .GE => .GE,
+        .EQ => .EQ,
+        .NEQ => .NEQ,
+        else => error.NotRelOperator,
+    };
+}
+
 fn lexemToPlusMinus(lexem: Lexem) !ast.PlusMinus {
     return switch (lexem.type) {
         .ADD => .PLUS,

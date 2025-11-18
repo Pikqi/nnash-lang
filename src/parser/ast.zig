@@ -12,7 +12,7 @@ const Types = enum {
 
 // program = {top_item} EOF
 pub const Program = struct {
-    top_items: ArrayList(*TopItem),
+    top_items: ArrayList(TopItem),
     const Self = @This();
     pub fn dump(self: *const Self) void {
         for (self.top_items.items) |i| {
@@ -22,45 +22,32 @@ pub const Program = struct {
 };
 
 pub const TopItem = union(enum) {
-    block: *SomeBlock,
-    simple: *TopSimpleItem,
+    block: SomeBlock,
+    simple: TopSimpleItem,
 };
 
 pub const SomeBlock = union(enum) {
-    ifBlock: IfBlock,
-    whileBlock: WhileBlock,
-    funBlock: FunBlock,
+    ifBlock: *IfBlock,
+    whileBlock: *WhileBlock,
+    funBlock: *FunBlock,
 };
 pub const IfBlock = struct {
-    condition: Condition,
-    blockStatements: ArrayList(BlockUnion),
+    condition: *Condition,
+    blockStatements: []TopItem,
 };
 pub const WhileBlock = struct {
-    condition: Condition,
-    blockStatements: ArrayList(BlockUnion),
+    condition: *Condition,
+    blockStatements: []TopItem,
 };
 pub const FunBlock = struct {};
-
-pub const Block = struct {
-    stmtOrBlockList: ArrayList(BlockUnion),
-};
-
-pub const BlockUnion = union(enum) { statement: Statement, blocks: SomeBlock };
-
-pub const Statement = union(enum) {
-    varDeclaration: VarDeclaration,
-    varDeclarationAsign: VarDeclarationAsign,
-    callMaybeAssign: CallMaybeAssign,
-    assignStatement: AssignStatement,
-    returnStatement: ReturnStatement,
-};
 
 // top_simple = (var_decl | var_decl_assign | call_and_maybe_assign | assign_stmt) STATMENT_END;
 pub const TopSimpleItem = union(enum) {
     varDeclaration: *VarDeclaration,
-    varDeclarationAsign: *VarDeclarationAsign,
-    assignStatement: *AssignStatement,
+    varDeclarationAsign: VarDeclarationAsign,
+    assignStatement: AssignStatement,
     callExpression: *CallExpression,
+    returnStatement: ReturnStatement,
 };
 
 pub const VarDeclaration = struct {
@@ -85,9 +72,27 @@ pub const LValue = struct {
     index: ?*Tuple,
 };
 
-pub const ReturnStatement = struct {};
+pub const ReturnStatement = union(enum) {
+    expression: *Expression,
+    void: void,
+};
 
-pub const Condition = struct {};
+pub const Condition = union(enum) {
+    literal: bool,
+    nested: struct {
+        expressions: []*Expression,
+        operator: []RelOperator,
+    },
+};
+
+pub const RelOperator = enum {
+    LT,
+    LE,
+    GT,
+    GE,
+    EQ,
+    NEQ,
+};
 
 pub const Expression = union(enum) {
     aExpression: *AExpression,
@@ -124,6 +129,7 @@ pub const PrimaryToken = union(enum) {
     int_lit: Lexem,
     float_lit: Lexem,
     str_lit: Lexem,
+    bool_lit: Lexem,
 };
 
 pub const Literal = enum {};

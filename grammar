@@ -50,7 +50,7 @@ primary 			 = number | ( LPAREN expr RPAREN );
 number  			 = IDENT | INT_LIT | FLOAT_LIT
 
 
-cond           = aexpr rel_op aexpr;
+cond           = expr {rel_op expr}
 rel_op         = LT | LE | GT | GE | EQ | NEQ ;
 
 literal        = VOID_LIT | INT_LIT | FLOAT_LIT | STRING_LIT
