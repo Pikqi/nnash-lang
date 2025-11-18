@@ -368,10 +368,11 @@ pub const Parser = struct {
             .leftUnary = try self.parseUnary(),
         };
 
-        if (self.matchOneOf(&[_]TokenType{ .TIMES, .DIV })) |matched| {
+        if (self.matchOneOf(&[_]TokenType{ .TIMES, .DIV, .MOD })) |matched| {
             ml.operand = switch (matched.type) {
                 .TIMES => .TIMES,
                 .DIV => .DIV,
+                .MOD => .MOD,
                 else => unreachable,
             };
             ml.rightUnary = try self.parseUnary();

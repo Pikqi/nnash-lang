@@ -113,7 +113,7 @@ pub const AExpression = struct {
     ops: []PlusMinus,
 };
 pub const PlusMinus = enum { PLUS, MINUS };
-pub const TimesDiv = enum { TIMES, DIV };
+pub const TimesDiv = enum { TIMES, DIV, MOD };
 pub const Mul = struct {
     leftUnary: Unary,
     operand: ?TimesDiv = null,
