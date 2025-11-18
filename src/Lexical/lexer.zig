@@ -160,6 +160,7 @@ pub const Lexer = struct {
             '%' => try self.add(.MOD),
             '|' => try self.add(.PIPE),
             '^' => try self.add(.POW),
+            '=' => try self.add(.EQ),
             ' ', '\n', '\t' => {},
             '#' => {
                 _ = self.sc.advanceUntil('\n');
@@ -312,14 +313,15 @@ const keywords = std.static_string_map.StaticStringMap(TokenType).initComptime(&
     .{ "float", TokenType.FLOAT },
     .{ "true", TokenType.TRUE_LIT },
     .{ "false", TokenType.FALSE_LIT },
+    .{ "void", TokenType.VOID_LIT },
     .{ "if", TokenType.IF },
     .{ "fi", TokenType.END_IF },
     .{ "else", TokenType.ELSE },
 });
 
 test "Lexer simple lexems only" {
-    const input = "<> <= >= >> << ! ()[][[]] -+*/^,:!=100";
-    const expected_lexem_types = [_]TokenType{ .LT, .GT, .LE, .GE, .ASSIGN, .RETURN, .STATMENT_END, .LPAREN, .RPAREN, .LBRACKET, .RBRACKET, .LBRACKET_DOUBLE, .RBRACKET_DOUBLE, .SUB, .ADD, .TIMES, .DIV, .POW, .COMMA, .COLON, .NEQ, .INT_LIT };
+    const input = "<> <= >= >> << ! = ()[][[]] -+*/^,:!=100";
+    const expected_lexem_types = [_]TokenType{ .LT, .GT, .LE, .GE, .ASSIGN, .RETURN, .STATMENT_END, .EQ, .LPAREN, .RPAREN, .LBRACKET, .RBRACKET, .LBRACKET_DOUBLE, .RBRACKET_DOUBLE, .SUB, .ADD, .TIMES, .DIV, .POW, .COMMA, .COLON, .NEQ, .INT_LIT };
     var lexer = try Lexer.init(input, std.testing.allocator);
     try lexer.scanTokens();
     try std.testing.expectEqual(expected_lexem_types.len, lexer.lexems.items.len);
