@@ -3,6 +3,7 @@ const std = @import("std");
 pub const preprocessor = @import("preprocessor.zig");
 pub const lexer = @import("Lexical/lexer.zig");
 pub const parser = @import("parser/root.zig");
+pub const Nash = @import("Nash.zig");
 
 test "import" {
     _ = @import("preprocessor.zig");

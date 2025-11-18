@@ -27,23 +27,7 @@ pub fn main() !void {
         return;
     }
 
-    const file = try std.fs.cwd().openFile(file_name, .{});
-    defer file.close();
-
-    const file_contents = try file.readToEndAlloc(alloc, 1024 * 1024 * 4);
-    defer alloc.free(file_contents);
-
-    var lexer = try Lexer.init(file_contents, alloc);
-    defer lexer.deinit();
-    try lexer.scanTokens();
-
-    const tokens = try lexer.lexems.toOwnedSlice(alloc);
-    defer alloc.free(tokens);
-
-    var arena = std.heap.ArenaAllocator.init(alloc);
-
-    var parser = Parser.init(tokens, &arena);
-    defer parser.deinit();
-    try parser.parse();
-    try parser.printAST(writer);
+    var nash = try nnash.Nash.parseFile(file_name, alloc);
+    try nash.parser.printAST(writer);
+    defer nash.deinit();
 }

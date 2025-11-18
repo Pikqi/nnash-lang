@@ -5,7 +5,9 @@ const Parser = parser_mod.Parser;
 const Lexer = @import("Lexical/lexer.zig").Lexer;
 const testing = std.testing;
 const example_folder = "src/test_files/examples";
+const Nash = @import("Nash.zig");
 
+const parsable_folder = "src/test_files/parsable";
 // test "example 1" {
 //     const example1 = @embedFile("../../test_files/examples/1.nsh");
 //
@@ -30,18 +32,20 @@ test "Tokenize all files" {
     }
 }
 
-test "parse AST 1" {
-    const lexems = try tokenizeFile("0.nsh");
-    defer testing.allocator.free(lexems);
-    var arena = std.heap.ArenaAllocator.init(testing.allocator);
-    var parser = Parser.init(lexems, &arena);
-    defer parser.deinit();
-    var buff: [1024]u8 = undefined;
-
-    try parser.parse();
-    const stdout = std.fs.File.stderr().writer(&buff);
-    var writer = stdout.interface;
-    try parser.printAST(&writer);
+test "parsable files" {
+    var folder = try std.fs.cwd().openDir(parsable_folder, .{ .iterate = true });
+    defer folder.close();
+    var iterator = try folder.walk(testing.allocator);
+    defer iterator.deinit();
+    while (try iterator.next()) |entry| {
+        if (entry.kind != .file) {
+            continue;
+        }
+        const path = try folder.realpathAlloc(testing.allocator, entry.path);
+        defer testing.allocator.free(path);
+        var nash = try Nash.parseFile(path, testing.allocator);
+        defer nash.deinit();
+    }
 }
 
 fn tokenizeFile(file_path: []const u8) ![]lexer_mod.Lexem {

@@ -33,7 +33,16 @@ c | @print! # poziv builtin funkcije, builtin funkcije krecu sa @
 
 [a,b] | @max | @print! # [a, b, ...] uredjena n-torka
 
-if a<b:
+if [a<b]:
+	statemnt!
+else if [cond]:
+	nesto!
+else if [cond2]:
+	drugo!
+else:
+	finally!
+fi
+	
 
 
 [a < b] {"manje":"vece"} | @print! # [logiciki uslov] {ako da  : ako ne}
