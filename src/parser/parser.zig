@@ -103,7 +103,7 @@ pub const Parser = struct {
         _ = try self.consume(.FUN_DEC, "Expected fun");
         const fn_ident = try self.consume(.IDENT, "Expected identifier after fun");
         _ = try self.consume(.LBRACKET_DOUBLE, "Expected [[");
-        var params_list = try ArrayList(*ast.VarDeclaration).initCapacity(self.alloc, 5);
+        var params_list = try ArrayList(ast.VarDeclaration).initCapacity(self.alloc, 5);
         while (self.match(.RBRACKET_DOUBLE) == null) {
             _ = self.match(.COMMA);
             try params_list.append(self.alloc, try self.varDeclaration());
@@ -130,44 +130,39 @@ pub const Parser = struct {
         };
     }
 
-    fn whileBlock(self: *Self) anyerror!*ast.WhileBlock {
+    fn whileBlock(self: *Self) anyerror!ast.WhileBlock {
         _ = try self.consume(.WHILE, "Expected while");
-        const while_block = try self.alloc.create(ast.WhileBlock);
         _ = try self.consume(.LBRACKET, "Expected [");
 
-        while_block.condition = try self.cond();
+        const condition = try self.cond();
         _ = try self.consume(.RBRACKET, "Expected ]");
 
         var statements = try ArrayList(ast.TopItem).initCapacity(self.alloc, 10);
         while (!self.check(.ENDWHILE)) {
             try statements.append(self.alloc, try self.topItem(true));
         }
-        while_block.blockStatements = try statements.toOwnedSlice(self.alloc);
+        const blockStatements = try statements.toOwnedSlice(self.alloc);
 
         _ = self.advance(); // consume endwhile
 
-        return while_block;
+        return ast.WhileBlock{ .blockStatements = blockStatements, .condition = condition };
     }
 
-    fn cond(self: *Self) !*ast.Condition {
-        const condition = try self.alloc.create(ast.Condition);
+    fn cond(self: *Self) !ast.Condition {
         if (self.matchOneOf(&[_]TokenType{ .TRUE_LIT, .FALSE_LIT })) |matched| {
-            condition.* = .{ .literal = matched.type == .TRUE_LIT };
-            return condition;
+            return .{ .literal = matched.type == .TRUE_LIT };
         }
-        var expressions = try ArrayList(*ast.Expression).initCapacity(self.alloc, 10);
+        var expressions = try ArrayList(ast.Expression).initCapacity(self.alloc, 10);
         var operators = try ArrayList(ast.RelOperator).initCapacity(self.alloc, 9);
         try expressions.append(self.alloc, try self.parseExpression());
         while (self.matchOneOf(&[_]TokenType{ .LT, .LE, .GT, .GE, .EQ, .NEQ })) |matched| {
             try operators.append(self.alloc, lexemToRelOperator(matched) catch unreachable);
             try expressions.append(self.alloc, try self.parseExpression());
         }
-        condition.* = .{ .nested = .{
+        return .{ .nested = .{
             .expressions = try expressions.toOwnedSlice(self.alloc),
             .operator = try operators.toOwnedSlice(self.alloc),
         } };
-
-        return condition;
     }
 
     // top_simple = (var_decl | var_decl_assign | assign_stmt | call_expr) STATMENT_END;
@@ -208,7 +203,7 @@ pub const Parser = struct {
             return ret;
         }
 
-        if (ex.* != .callExpression) {
+        if (ex != .callExpression) {
             return error.SyntaxError;
         }
         _ = try self.consume(.STATMENT_END, "Exprected !");
@@ -223,32 +218,24 @@ pub const Parser = struct {
         };
     }
     // var_decl = type COLON (IDENT | IDENT array_dims)
-    fn varDeclaration(self: *Self) !*ast.VarDeclaration {
-        const vd = try self.alloc.create(ast.VarDeclaration);
+    fn varDeclaration(self: *Self) !ast.VarDeclaration {
         const type_lexem = self.matchType();
         if (type_lexem == null) {
             self.reportError("Tried to parse type declaration but previous token is not a type");
             // return error.SyntaxError;
             return error.SyntaxError;
         }
-        vd.type = switch (type_lexem.?.type) {
-            .INT => .INT,
-            .FLOAT => .FLOAT,
-            .STRING => .STRING,
-            .BOOL => .BOOL,
-            .VOID_LIT => .VOID,
-            else => unreachable,
-        };
+        const vd_type = try lexemToType(type_lexem.?);
+
         _ = self.advance(); // consume type
         _ = try self.consume(.COLON, "Expected : after type");
         const ident_token = try self.consume(.IDENT, "Expected identifier");
-        vd.ident = try self.alloc.dupe(u8, ident_token.str.?);
 
         if (self.match(.LBRACKET) != null) {
             self.reportError("Array dims not implemented");
             return error.SyntaxError;
         }
-        return vd;
+        return .{ .type = vd_type, .ident = try self.alloc.dupe(u8, ident_token.str.?) };
     }
     // assign_stmt    = expr ASSIGN lvalue ;
     fn asignStatement(self: *Self) !*ast.AssignStatement {
@@ -259,27 +246,25 @@ pub const Parser = struct {
     }
 
     // expr           = aexpr | call_expr ;
-    fn parseExpression(self: *Self) anyerror!*ast.Expression {
-        const ex = try self.alloc.create(ast.Expression);
+    fn parseExpression(self: *Self) anyerror!ast.Expression {
         // tuple
         if (self.check(.LBRACKET)) {
             const tuple = try self.parseTuple();
             if (self.check(.PIPE)) {
-                ex.* = .{ .callExpression = try self.callExpression(tuple) };
+                return .{ .callExpression = try self.callExpression(tuple) };
             } else {
-                ex.* = .{ .tupleExpression = tuple };
+                return .{ .tupleExpression = tuple };
             }
-        } else {
-            ex.* = .{ .aExpression = try self.parseAExpression() };
         }
-        return ex;
+
+        return .{ .aExpression = try self.parseAExpression() };
     }
 
     // tuple = LBRACKET expr { COMMA expr }  RBRACKET ;
     fn parseTuple(self: *Self) !*ast.Tuple {
         _ = try self.consume(.LBRACKET, "Expected ");
         const tuple = try self.alloc.create(ast.Tuple);
-        var exprs = try ArrayList(*ast.Expression).initCapacity(self.alloc, 5);
+        var exprs = try ArrayList(ast.Expression).initCapacity(self.alloc, 5);
         try exprs.append(self.alloc, try self.parseExpression());
 
         while (self.match(.RBRACKET) == null) {
@@ -293,13 +278,10 @@ pub const Parser = struct {
     // [1, 2] | @max | @print!
 
     // call_expr      = tuple PIPE call_expr_continue
-    fn callExpression(self: *Self, tuple_opt: ?*ast.Tuple) !*ast.CallExpression {
-        const cex = try self.alloc.create(ast.CallExpression);
+    fn callExpression(self: *Self, tuple_opt: ?*ast.Tuple) !ast.CallExpression {
         const tuple = if (tuple_opt) |t| t else try self.parseTuple();
-        cex.args = tuple;
         _ = try self.consume(.PIPE, "Expected | after tuple");
-        cex.callExpressionContinue = try self.callExpressionContinue();
-        return cex;
+        return .{ .args = tuple, .callExpressionContinue = try self.callExpressionContinue() };
     }
 
     // call_expr_continue = (IDENT | BUILTIN_FUN) (PIPE call_expr_continue)?;
@@ -320,9 +302,8 @@ pub const Parser = struct {
     }
 
     // add = mul { ( PLUS | MINUS ) mul };
-    fn parseAExpression(self: *Self) !*ast.AExpression {
-        const ax = try self.alloc.create(ast.AExpression);
-        var muls = try ArrayList(*ast.Mul).initCapacity(self.alloc, 5);
+    fn parseAExpression(self: *Self) !ast.AExpression {
+        var muls = try ArrayList(ast.Mul).initCapacity(self.alloc, 5);
         var operands = try ArrayList(ast.PlusMinus).initCapacity(self.alloc, 5);
         try muls.append(self.alloc, try self.parseMul());
         while (true) {
@@ -331,19 +312,17 @@ pub const Parser = struct {
             try operands.append(self.alloc, lexemToPlusMinus(matched.?) catch unreachable);
             try muls.append(self.alloc, try self.parseMul());
         }
-        ax.muls = try muls.toOwnedSlice(self.alloc);
-        ax.ops = try operands.toOwnedSlice(self.alloc);
-
-        return ax;
+        return .{
+            .muls = try muls.toOwnedSlice(self.alloc),
+            .ops = try operands.toOwnedSlice(self.alloc),
+        };
     }
 
     // mul = unary { ( TIMES | DIV ) unary }
-    fn parseMul(self: *Self) !*ast.Mul {
-        const ml = try self.alloc.create(ast.Mul);
-        ml.leftUnary = try self.parseUnary();
-
-        ml.rightUnary = null;
-        ml.operand = null;
+    fn parseMul(self: *Self) !ast.Mul {
+        var ml: ast.Mul = .{
+            .leftUnary = try self.parseUnary(),
+        };
 
         if (self.matchOneOf(&[_]TokenType{ .TIMES, .DIV })) |matched| {
             ml.operand = switch (matched.type) {
@@ -357,8 +336,8 @@ pub const Parser = struct {
     }
 
     // unary = [ PLUS | MINUS ] power
-    fn parseUnary(self: *Self) !*ast.Unary {
-        const un = try self.alloc.create(ast.Unary);
+    fn parseUnary(self: *Self) !ast.Unary {
+        var un: ast.Unary = undefined;
         un.sign = null;
         const matched = self.matchOneOf(&[_]TokenType{ .ADD, .SUB });
         if (matched) |plus_minus| {
@@ -380,33 +359,33 @@ pub const Parser = struct {
         return po;
     }
 
-    fn parsePrimary(self: *Self) !*ast.Primary {
-        const pr = try self.alloc.create(ast.Primary);
+    fn parsePrimary(self: *Self) !ast.Primary {
+        var pr: ast.Primary = undefined;
         const matched = self.matchOneOf(&[_]TokenType{ .INT_LIT, .FLOAT_LIT, .IDENT, .STRING_LIT, .TRUE_LIT, .FALSE_LIT });
         if (matched == null) {
             _ = try self.consume(.LPAREN, "Expected (");
-            pr.* = .{ .expr = try self.parseExpression() };
+            pr = .{ .expr = try self.parseExpression() };
             _ = try self.consume(.RPAREN, "Expected )");
-        } else {
-            switch (matched.?.type) {
-                .INT_LIT => {
-                    pr.* = .{ .primaryToken = .{ .int_lit = matched.? } };
-                },
-                .FLOAT_LIT => {
-                    pr.* = .{ .primaryToken = .{ .float_lit = matched.? } };
-                },
-                .IDENT => {
-                    pr.* = .{ .primaryToken = .{ .ident = matched.? } };
-                },
-                .STRING_LIT => {
-                    pr.* = .{ .primaryToken = .{ .str_lit = matched.? } };
-                },
-                .TRUE_LIT, .FALSE_LIT => {
-                    pr.* = .{ .primaryToken = .{ .bool_lit = matched.? } };
-                },
+            return pr;
+        }
+        switch (matched.?.type) {
+            .INT_LIT => {
+                pr = .{ .primaryToken = .{ .int_lit = matched.? } };
+            },
+            .FLOAT_LIT => {
+                pr = .{ .primaryToken = .{ .float_lit = matched.? } };
+            },
+            .IDENT => {
+                pr = .{ .primaryToken = .{ .ident = matched.? } };
+            },
+            .STRING_LIT => {
+                pr = .{ .primaryToken = .{ .str_lit = matched.? } };
+            },
+            .TRUE_LIT, .FALSE_LIT => {
+                pr = .{ .primaryToken = .{ .bool_lit = matched.? } };
+            },
 
-                else => unreachable,
-            }
+            else => unreachable,
         }
         return pr;
     }

@@ -27,31 +27,31 @@ pub const TopItem = union(enum) {
 };
 
 pub const SomeBlock = union(enum) {
-    ifBlock: *IfBlock,
-    whileBlock: *WhileBlock,
+    ifBlock: IfBlock,
+    whileBlock: WhileBlock,
     funBlock: FunBlock,
 };
 pub const IfBlock = struct {
-    condition: *Condition,
+    condition: Condition,
     blockStatements: []TopItem,
 };
 pub const WhileBlock = struct {
-    condition: *Condition,
+    condition: Condition,
     blockStatements: []TopItem,
 };
 pub const FunBlock = struct {
     name: []const u8,
-    params: []*VarDeclaration,
+    params: []VarDeclaration,
     blockStatements: []TopItem,
     returnType: Types,
 };
 
 // top_simple = (var_decl | var_decl_assign | call_and_maybe_assign | assign_stmt) STATMENT_END;
 pub const TopSimpleItem = union(enum) {
-    varDeclaration: *VarDeclaration,
+    varDeclaration: VarDeclaration,
     varDeclarationAsign: VarDeclarationAsign,
     assignStatement: AssignStatement,
-    callExpression: *CallExpression,
+    callExpression: CallExpression,
     returnStatement: ReturnStatement,
 };
 
@@ -62,14 +62,14 @@ pub const VarDeclaration = struct {
 };
 
 pub const VarDeclarationAsign = struct {
-    varDeclaration: *VarDeclaration,
-    expr: *Expression,
+    varDeclaration: VarDeclaration,
+    expr: Expression,
 };
 
 pub const CallMaybeAssign = struct {};
 
 pub const AssignStatement = struct {
-    expr: *Expression,
+    expr: Expression,
     lvalue: LValue,
 };
 pub const LValue = struct {
@@ -78,14 +78,14 @@ pub const LValue = struct {
 };
 
 pub const ReturnStatement = union(enum) {
-    expression: *Expression,
+    expression: Expression,
     void: void,
 };
 
 pub const Condition = union(enum) {
     literal: bool,
     nested: struct {
-        expressions: []*Expression,
+        expressions: []Expression,
         operator: []RelOperator,
     },
 };
@@ -100,20 +100,20 @@ pub const RelOperator = enum {
 };
 
 pub const Expression = union(enum) {
-    aExpression: *AExpression,
-    callExpression: *CallExpression,
+    aExpression: AExpression,
+    callExpression: CallExpression,
     tupleExpression: *Tuple,
 };
 pub const AExpression = struct {
-    muls: []*Mul,
+    muls: []Mul,
     ops: []PlusMinus,
 };
 pub const PlusMinus = enum { PLUS, MINUS };
 pub const TimesDiv = enum { TIMES, DIV };
 pub const Mul = struct {
-    leftUnary: *Unary,
+    leftUnary: Unary,
     operand: ?TimesDiv = null,
-    rightUnary: ?*Unary = null,
+    rightUnary: ?Unary = null,
 };
 pub const Unary = struct {
     sign: ?PlusMinus = null,
@@ -121,13 +121,13 @@ pub const Unary = struct {
 };
 
 pub const Power = struct {
-    primary: *Primary,
+    primary: Primary,
     pow: ?*Power = null,
 };
 
 pub const Primary = union(enum) {
     primaryToken: PrimaryToken,
-    expr: *Expression,
+    expr: Expression,
 };
 pub const PrimaryToken = union(enum) {
     ident: Lexem,
@@ -156,5 +156,5 @@ pub const CallExpressionContinue = struct {
 };
 
 pub const Tuple = struct {
-    exprs: []*Expression,
+    exprs: []Expression,
 };
