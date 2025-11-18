@@ -11,12 +11,12 @@ int:i!
 [1, 2] | @max!
 ([1, 2] | @max | print | some_other_function) + 3 >> lval[0]!
 
-# [([void] | funk1), ([0] | sqrt)] >> lval!
+ [([void] | funk1), ([0] | sqrt)] >> lval!
 
 while [i < 10]
 	int:i!
 	<< 1!
-	#[i] | @print!
+	[i] | @print!
 	while [true]
 		1 + i >> int:i!
 	elihw

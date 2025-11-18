@@ -213,6 +213,7 @@ pub const Parser = struct {
             return ifbl;
         }
 
+        self.reportError("IF BLOCK unkown case");
         return error.SyntaxError;
     }
 
@@ -272,6 +273,7 @@ pub const Parser = struct {
         }
 
         if (ex != .callExpression) {
+            self.reportError("Expected expression to be a call expression");
             return error.SyntaxError;
         }
         _ = try self.consume(.STATMENT_END, "Exprected !");
@@ -290,7 +292,6 @@ pub const Parser = struct {
         const type_lexem = self.matchType();
         if (type_lexem == null) {
             self.reportError("Tried to parse type declaration but previous token is not a type");
-            // return error.SyntaxError;
             return error.SyntaxError;
         }
         const vd_type = try lexemToType(type_lexem.?);
