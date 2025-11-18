@@ -2,7 +2,7 @@ const std = @import("std");
 const ArrayList = std.ArrayList;
 const Lexem = @import("../Lexical/lexer.zig").Lexem;
 
-const Types = enum {
+pub const Types = enum {
     INT,
     STRING,
     VOID,
@@ -29,7 +29,7 @@ pub const TopItem = union(enum) {
 pub const SomeBlock = union(enum) {
     ifBlock: *IfBlock,
     whileBlock: *WhileBlock,
-    funBlock: *FunBlock,
+    funBlock: FunBlock,
 };
 pub const IfBlock = struct {
     condition: *Condition,
@@ -39,7 +39,12 @@ pub const WhileBlock = struct {
     condition: *Condition,
     blockStatements: []TopItem,
 };
-pub const FunBlock = struct {};
+pub const FunBlock = struct {
+    name: []const u8,
+    params: []*VarDeclaration,
+    blockStatements: []TopItem,
+    returnType: Types,
+};
 
 // top_simple = (var_decl | var_decl_assign | call_and_maybe_assign | assign_stmt) STATMENT_END;
 pub const TopSimpleItem = union(enum) {

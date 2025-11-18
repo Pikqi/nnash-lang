@@ -22,3 +22,8 @@ while [i < 10]
 		1 + i >> int:i!
 	elihw
 elihw
+
+fun fibonacci [[int:a, string:b]]:int
+	[a-b] | print!
+nuf
+

@@ -84,8 +84,7 @@ pub const Parser = struct {
                 }
             },
             .FUN_DEC => {
-                // todo function declaration
-                return error.NotImplemented;
+                return .{ .block = .{ .funBlock = try self.function() } };
             },
             .WHILE => {
                 return .{ .block = .{ .whileBlock = try self.whileBlock() } };
@@ -99,6 +98,38 @@ pub const Parser = struct {
             },
         }
     }
+
+    fn function(self: *Self) anyerror!ast.FunBlock {
+        _ = try self.consume(.FUN_DEC, "Expected fun");
+        const fn_ident = try self.consume(.IDENT, "Expected identifier after fun");
+        _ = try self.consume(.LBRACKET_DOUBLE, "Expected [[");
+        var params_list = try ArrayList(*ast.VarDeclaration).initCapacity(self.alloc, 5);
+        while (self.match(.RBRACKET_DOUBLE) == null) {
+            _ = self.match(.COMMA);
+            try params_list.append(self.alloc, try self.varDeclaration());
+        }
+
+        _ = try self.consume(.COLON, "Expected :");
+        const return_type = self.matchType();
+        if (return_type == null) {
+            self.reportError("Expected type after :");
+            return error.SyntaxError;
+        }
+        _ = self.advance();
+
+        var statements = try ArrayList(ast.TopItem).initCapacity(self.alloc, 10);
+        while (self.match(.END_FUN_DEC) == null) {
+            try statements.append(self.alloc, try self.topItem(true));
+        }
+
+        return .{
+            .returnType = try lexemToType(return_type.?),
+            .name = try self.alloc.dupe(u8, fn_ident.str.?),
+            .params = try params_list.toOwnedSlice(self.alloc),
+            .blockStatements = try statements.toOwnedSlice(self.alloc),
+        };
+    }
+
     fn whileBlock(self: *Self) anyerror!*ast.WhileBlock {
         _ = try self.consume(.WHILE, "Expected while");
         const while_block = try self.alloc.create(ast.WhileBlock);
@@ -474,5 +505,16 @@ fn lexemToPlusMinus(lexem: Lexem) !ast.PlusMinus {
         .ADD => .PLUS,
         .SUB => .MINUS,
         else => error.NotPlusMinus,
+    };
+}
+
+fn lexemToType(lexem: Lexem) !ast.Types {
+    return switch (lexem.type) {
+        .INT => .INT,
+        .STRING => .STRING,
+        .VOID_LIT => .VOID,
+        .FLOAT => .FLOAT,
+        .BOOL => .BOOL,
+        else => error.NotAType,
     };
 }

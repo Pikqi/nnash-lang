@@ -150,6 +150,14 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_mod_tests.step);
     test_step.dependOn(&run_exe_tests.step);
 
+    const exe_check = b.addExecutable(.{
+        .name = "nnash-chekc",
+        .root_module = exe.root_module,
+    });
+
+    const check = b.step("check", "Check if it compiles");
+    check.dependOn(&exe_check.step);
+
     // Just like flags, top level steps are also listed in the `--help` menu.
     //
     // The Zig build system is entirely implemented in userland, which means

@@ -190,6 +190,20 @@ fn dumpSomeBlock(writer: *Writer, item: ast.SomeBlock, depth: usize) !void {
                 try dumpTopItem(writer, b, depth + 2);
             }
         },
+        .funBlock => |fun| {
+            try writer.print("Function\n", .{});
+            try writeIndent(writer, depth);
+            try writer.print("NAME: {s}\n", .{fun.name});
+            try writeIndent(writer, depth);
+            try writer.print("RETURN TYPE: {t}\n", .{fun.returnType});
+
+            try writeIndent(writer, depth);
+            try writer.print("BlockStatements\n", .{});
+            for (fun.blockStatements) |b| {
+                try writeIndent(writer, depth + 1);
+                try dumpTopItem(writer, b, depth + 2);
+            }
+        },
         else => {
             std.debug.print("todo", .{});
         },
