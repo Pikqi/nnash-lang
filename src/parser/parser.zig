@@ -392,7 +392,6 @@ pub const Parser = struct {
         po.primary = try self.parsePrimary();
         po.pow = null;
 
-        // TODO ADD PARSING POW IN LEXER
         if (self.match(.POW) != null) {
             po.pow = try self.parsePower();
         }

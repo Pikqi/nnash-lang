@@ -4,6 +4,8 @@ int:i!
 (1 + 3) * 2 >>i!
 -1 + 3 * 2 >>i!
 
+2 * 2  ^ 3 ^ 4 >>i!
+
 "string literal" >> int:moj_string!
 
 [1, 2] | @max!
