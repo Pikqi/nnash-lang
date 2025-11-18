@@ -18,7 +18,6 @@ pub const Parser = struct {
     tokens: []Lexem,
     current: usize = 0,
     arena: *ArenaAllocator,
-    alloc: Allocator,
     program: ?ast.Program = null,
     fn reportError(self: *Self, msg: []const u8) void {
         std.log.err("{s}\n", .{msg});
@@ -26,15 +25,20 @@ pub const Parser = struct {
     }
 
     const Self = @This();
-    pub fn init(tokens: []Lexem, arena: *ArenaAllocator) Self {
+    pub fn init(tokens: []Lexem, alloc: Allocator) !Self {
+        const arena = try alloc.create(ArenaAllocator);
+        errdefer alloc.destroy(arena);
+        arena.* = ArenaAllocator.init(alloc);
+
         return Self{
             .tokens = tokens,
             .arena = arena,
-            .alloc = arena.allocator(),
         };
     }
     pub fn deinit(self: *Self) void {
-        _ = self.arena.reset(.free_all);
+        const allocator = self.arena.child_allocator;
+        self.arena.deinit();
+        allocator.destroy(self.arena);
     }
     pub fn printAST(self: *const Self, writer: *std.Io.Writer) !void {
         if (self.program == null) {
@@ -46,7 +50,7 @@ pub const Parser = struct {
     pub fn parse(self: *Self) !void {
         self.program = .{
             // todo
-            .top_items = ArrayList(ast.TopItem).initCapacity(self.alloc, 20) catch unreachable,
+            .top_items = ArrayList(ast.TopItem).initCapacity(self.arena.allocator(), 20) catch unreachable,
         };
         errdefer {
             const stdout = std.fs.File.stdout();
@@ -59,7 +63,7 @@ pub const Parser = struct {
 
     fn parseProgram(self: *Self) !void {
         while (!self.isAtEnd()) {
-            try self.program.?.top_items.append(self.alloc, try self.topItem(false));
+            try self.program.?.top_items.append(self.arena.allocator(), try self.topItem(false));
         }
     }
 
@@ -102,10 +106,10 @@ pub const Parser = struct {
         _ = try self.consume(.FUN_DEC, "Expected fun");
         const fn_ident = try self.consume(.IDENT, "Expected identifier after fun");
         _ = try self.consume(.LBRACKET_DOUBLE, "Expected [[");
-        var params_list = try ArrayList(ast.VarDeclaration).initCapacity(self.alloc, 5);
+        var params_list = try ArrayList(ast.VarDeclaration).initCapacity(self.arena.allocator(), 5);
         while (self.match(.RBRACKET_DOUBLE) == null) {
             _ = self.match(.COMMA);
-            try params_list.append(self.alloc, try self.varDeclaration());
+            try params_list.append(self.arena.allocator(), try self.varDeclaration());
         }
 
         _ = try self.consume(.COLON, "Expected :");
@@ -116,16 +120,16 @@ pub const Parser = struct {
         }
         _ = self.advance();
 
-        var statements = try ArrayList(ast.TopItem).initCapacity(self.alloc, 10);
+        var statements = try ArrayList(ast.TopItem).initCapacity(self.arena.allocator(), 10);
         while (self.match(.END_FUN_DEC) == null) {
-            try statements.append(self.alloc, try self.topItem(true));
+            try statements.append(self.arena.allocator(), try self.topItem(true));
         }
 
         return .{
             .returnType = try lexemToType(return_type.?),
-            .name = try self.alloc.dupe(u8, fn_ident.str.?),
-            .params = try params_list.toOwnedSlice(self.alloc),
-            .blockStatements = try statements.toOwnedSlice(self.alloc),
+            .name = try self.arena.allocator().dupe(u8, fn_ident.str.?),
+            .params = try params_list.toOwnedSlice(self.arena.allocator()),
+            .blockStatements = try statements.toOwnedSlice(self.arena.allocator()),
         };
     }
 
@@ -136,11 +140,11 @@ pub const Parser = struct {
         const condition = try self.cond();
         _ = try self.consume(.RBRACKET, "Expected ]");
 
-        var statements = try ArrayList(ast.TopItem).initCapacity(self.alloc, 10);
+        var statements = try ArrayList(ast.TopItem).initCapacity(self.arena.allocator(), 10);
         while (!self.check(.ENDWHILE)) {
-            try statements.append(self.alloc, try self.topItem(true));
+            try statements.append(self.arena.allocator(), try self.topItem(true));
         }
-        const blockStatements = try statements.toOwnedSlice(self.alloc);
+        const blockStatements = try statements.toOwnedSlice(self.arena.allocator());
 
         _ = self.advance(); // consume endwhile
 
@@ -154,15 +158,15 @@ pub const Parser = struct {
         _ = try self.consume(.RBRACKET, "Expected ] after condidition");
         _ = try self.consume(.COLON, "Expected : after ]");
 
-        const ifbl = try self.alloc.create(ast.IfBlock);
+        const ifbl = try self.arena.allocator().create(ast.IfBlock);
         ifbl.condition = condition;
 
-        var statements = try ArrayList(ast.TopItem).initCapacity(self.alloc, 10);
+        var statements = try ArrayList(ast.TopItem).initCapacity(self.arena.allocator(), 10);
 
         while (!self.check(.ELSE) and !self.check(.END_IF)) {
-            try statements.append(self.alloc, try self.topItem(true));
+            try statements.append(self.arena.allocator(), try self.topItem(true));
         }
-        ifbl.blockStatements = try statements.toOwnedSlice(self.alloc);
+        ifbl.blockStatements = try statements.toOwnedSlice(self.arena.allocator());
         if (self.match(.END_IF) != null) {
             ifbl.elseBlock = null;
             return ifbl;
@@ -174,13 +178,13 @@ pub const Parser = struct {
                 };
                 return ifbl;
             }
-            var else_statements = try ArrayList(ast.TopItem).initCapacity(self.alloc, 10);
+            var else_statements = try ArrayList(ast.TopItem).initCapacity(self.arena.allocator(), 10);
             while (!self.check(.END_IF)) {
-                try else_statements.append(self.alloc, try self.topItem(true));
+                try else_statements.append(self.arena.allocator(), try self.topItem(true));
             }
             _ = self.advance();
             ifbl.elseBlock = .{
-                .elseStatements = try else_statements.toOwnedSlice(self.alloc),
+                .elseStatements = try else_statements.toOwnedSlice(self.arena.allocator()),
             };
             return ifbl;
         }
@@ -192,16 +196,16 @@ pub const Parser = struct {
         if (self.matchOneOf(&[_]TokenType{ .TRUE_LIT, .FALSE_LIT })) |matched| {
             return .{ .literal = matched.type == .TRUE_LIT };
         }
-        var expressions = try ArrayList(ast.Expression).initCapacity(self.alloc, 10);
-        var operators = try ArrayList(ast.RelOperator).initCapacity(self.alloc, 9);
-        try expressions.append(self.alloc, try self.parseExpression());
+        var expressions = try ArrayList(ast.Expression).initCapacity(self.arena.allocator(), 10);
+        var operators = try ArrayList(ast.RelOperator).initCapacity(self.arena.allocator(), 9);
+        try expressions.append(self.arena.allocator(), try self.parseExpression());
         while (self.matchOneOf(&[_]TokenType{ .LT, .LE, .GT, .GE, .EQ, .NEQ })) |matched| {
-            try operators.append(self.alloc, lexemToRelOperator(matched) catch unreachable);
-            try expressions.append(self.alloc, try self.parseExpression());
+            try operators.append(self.arena.allocator(), lexemToRelOperator(matched) catch unreachable);
+            try expressions.append(self.arena.allocator(), try self.parseExpression());
         }
         return .{ .nested = .{
-            .expressions = try expressions.toOwnedSlice(self.alloc),
-            .operator = try operators.toOwnedSlice(self.alloc),
+            .expressions = try expressions.toOwnedSlice(self.arena.allocator()),
+            .operator = try operators.toOwnedSlice(self.arena.allocator()),
         } };
     }
 
@@ -251,7 +255,7 @@ pub const Parser = struct {
     }
     fn lvalue(self: *Self) !ast.LValue {
         const ident = try self.consume(.IDENT, "Expected Identifier");
-        const ident_str = try self.alloc.dupe(u8, ident.str.?);
+        const ident_str = try self.arena.allocator().dupe(u8, ident.str.?);
         return .{
             .ident = ident_str,
             .index = if (self.check(.LBRACKET)) try self.parseTuple() else null,
@@ -275,11 +279,11 @@ pub const Parser = struct {
             self.reportError("Array dims not implemented");
             return error.SyntaxError;
         }
-        return .{ .type = vd_type, .ident = try self.alloc.dupe(u8, ident_token.str.?) };
+        return .{ .type = vd_type, .ident = try self.arena.allocator().dupe(u8, ident_token.str.?) };
     }
     // assign_stmt    = expr ASSIGN lvalue ;
     fn asignStatement(self: *Self) !*ast.AssignStatement {
-        const as = try self.alloc.create(ast.AssignStatement);
+        const as = try self.arena.allocator().create(ast.AssignStatement);
         as.expr = try self.parseExpression();
         as.lvalue = try self.lvalue();
         return as;
@@ -303,15 +307,15 @@ pub const Parser = struct {
     // tuple = LBRACKET expr { COMMA expr }  RBRACKET ;
     fn parseTuple(self: *Self) !*ast.Tuple {
         _ = try self.consume(.LBRACKET, "Expected ");
-        const tuple = try self.alloc.create(ast.Tuple);
-        var exprs = try ArrayList(ast.Expression).initCapacity(self.alloc, 5);
-        try exprs.append(self.alloc, try self.parseExpression());
+        const tuple = try self.arena.allocator().create(ast.Tuple);
+        var exprs = try ArrayList(ast.Expression).initCapacity(self.arena.allocator(), 5);
+        try exprs.append(self.arena.allocator(), try self.parseExpression());
 
         while (self.match(.RBRACKET) == null) {
             _ = try self.consume(.COMMA, "Expected ,");
-            try exprs.append(self.alloc, try self.parseExpression());
+            try exprs.append(self.arena.allocator(), try self.parseExpression());
         }
-        tuple.exprs = try exprs.toOwnedSlice(self.alloc);
+        tuple.exprs = try exprs.toOwnedSlice(self.arena.allocator());
         return tuple;
     }
 
@@ -326,7 +330,7 @@ pub const Parser = struct {
 
     // call_expr_continue = (IDENT | BUILTIN_FUN) (PIPE call_expr_continue)?;
     fn callExpressionContinue(self: *Self) !*ast.CallExpressionContinue {
-        const cexc = try self.alloc.create(ast.CallExpressionContinue);
+        const cexc = try self.arena.allocator().create(ast.CallExpressionContinue);
         cexc.callExpressionContinue = null;
 
         const matched = self.matchOneOf(&[_]TokenType{ .IDENT, .BUILTIN_FUN });
@@ -334,7 +338,7 @@ pub const Parser = struct {
             self.reportError("Expected ident or builtin funciton");
             return error.SyntaxError;
         }
-        cexc.name = try self.alloc.dupe(u8, matched.?.str.?);
+        cexc.name = try self.arena.allocator().dupe(u8, matched.?.str.?);
         if (self.match(.PIPE) != null) {
             cexc.callExpressionContinue = try self.callExpressionContinue();
         }
@@ -343,18 +347,18 @@ pub const Parser = struct {
 
     // add = mul { ( PLUS | MINUS ) mul };
     fn parseAExpression(self: *Self) !ast.AExpression {
-        var muls = try ArrayList(ast.Mul).initCapacity(self.alloc, 5);
-        var operands = try ArrayList(ast.PlusMinus).initCapacity(self.alloc, 5);
-        try muls.append(self.alloc, try self.parseMul());
+        var muls = try ArrayList(ast.Mul).initCapacity(self.arena.allocator(), 5);
+        var operands = try ArrayList(ast.PlusMinus).initCapacity(self.arena.allocator(), 5);
+        try muls.append(self.arena.allocator(), try self.parseMul());
         while (true) {
             const matched = self.matchOneOf(&[_]TokenType{ .ADD, .SUB });
             if (matched == null) break;
-            try operands.append(self.alloc, lexemToPlusMinus(matched.?) catch unreachable);
-            try muls.append(self.alloc, try self.parseMul());
+            try operands.append(self.arena.allocator(), lexemToPlusMinus(matched.?) catch unreachable);
+            try muls.append(self.arena.allocator(), try self.parseMul());
         }
         return .{
-            .muls = try muls.toOwnedSlice(self.alloc),
-            .ops = try operands.toOwnedSlice(self.alloc),
+            .muls = try muls.toOwnedSlice(self.arena.allocator()),
+            .ops = try operands.toOwnedSlice(self.arena.allocator()),
         };
     }
 
@@ -388,7 +392,7 @@ pub const Parser = struct {
     }
     // power = primary [ POW power ];
     fn parsePower(self: *Self) !*ast.Power {
-        const po = try self.alloc.create(ast.Power);
+        const po = try self.arena.allocator().create(ast.Power);
         po.primary = try self.parsePrimary();
         po.pow = null;
 
