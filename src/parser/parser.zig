@@ -90,8 +90,7 @@ pub const Parser = struct {
                 return .{ .block = .{ .whileBlock = try self.whileBlock() } };
             },
             .IF => {
-                // todo while block
-                return error.NotImplemented;
+                return .{ .block = .{ .ifBlock = try self.ifBlock() } };
             },
             else => {
                 return .{ .simple = try self.topSimple() };
@@ -146,6 +145,47 @@ pub const Parser = struct {
         _ = self.advance(); // consume endwhile
 
         return ast.WhileBlock{ .blockStatements = blockStatements, .condition = condition };
+    }
+    fn ifBlock(self: *Self) anyerror!*ast.IfBlock {
+        _ = try self.consume(.IF, "Expected IF");
+        _ = try self.consume(.LBRACKET, "Expected [ after if");
+        const condition = try self.cond();
+
+        _ = try self.consume(.RBRACKET, "Expected ] after condidition");
+        _ = try self.consume(.COLON, "Expected : after ]");
+
+        const ifbl = try self.alloc.create(ast.IfBlock);
+        ifbl.condition = condition;
+
+        var statements = try ArrayList(ast.TopItem).initCapacity(self.alloc, 10);
+
+        while (!self.check(.ELSE) and !self.check(.END_IF)) {
+            try statements.append(self.alloc, try self.topItem(true));
+        }
+        ifbl.blockStatements = try statements.toOwnedSlice(self.alloc);
+        if (self.match(.END_IF) != null) {
+            ifbl.elseBlock = null;
+            return ifbl;
+        }
+        if (self.match(.ELSE) != null) {
+            if (self.check(.IF)) {
+                ifbl.elseBlock = .{
+                    .elif = try self.ifBlock(),
+                };
+                return ifbl;
+            }
+            var else_statements = try ArrayList(ast.TopItem).initCapacity(self.alloc, 10);
+            while (!self.check(.END_IF)) {
+                try else_statements.append(self.alloc, try self.topItem(true));
+            }
+            _ = self.advance();
+            ifbl.elseBlock = .{
+                .elseStatements = try else_statements.toOwnedSlice(self.alloc),
+            };
+            return ifbl;
+        }
+
+        return error.SyntaxError;
     }
 
     fn cond(self: *Self) !ast.Condition {

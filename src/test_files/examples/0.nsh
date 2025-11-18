@@ -1,4 +1,4 @@
-#basic for loop
+# comment
 int:i!
 0>>i!
 (1 + 3) * 2 >>i!
@@ -27,3 +27,13 @@ fun fibonacci [[int:a, string:b]]:int
 	[a-b] | print!
 nuf
 
+
+if [a<b]:
+	int:i!
+else if [a<b]:
+	int:i!
+	int:i!
+else 
+	int:i!
+	int:i!
+fi

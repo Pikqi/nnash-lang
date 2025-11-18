@@ -204,9 +204,41 @@ fn dumpSomeBlock(writer: *Writer, item: ast.SomeBlock, depth: usize) !void {
                 try dumpTopItem(writer, b, depth + 2);
             }
         },
-        else => {
-            std.debug.print("todo", .{});
+        .ifBlock => |ifbl| try dumpIf(writer, ifbl, depth),
+    }
+}
+
+fn dumpIf(writer: *Writer, item: *ast.IfBlock, depth: usize) !void {
+    try writer.print("IF\n", .{});
+    try writeIndent(writer, depth);
+    try dumpCondition(writer, item.condition, depth + 1);
+
+    try writeIndent(writer, depth);
+    try dumpBlockStatements(writer, item.blockStatements, depth + 1);
+    if (item.elseBlock == null) {
+        return;
+    }
+    switch (item.elseBlock.?) {
+        .elif => |elif| {
+            try writeIndent(writer, depth);
+            try writer.print("Else if\n", .{});
+            try writeIndent(writer, depth);
+            try dumpIf(writer, elif, depth + 1);
         },
+        .elseStatements => |stmt| {
+            try writeIndent(writer, depth);
+            try writer.print("Else Statements\n", .{});
+            try writeIndent(writer, depth);
+            try dumpBlockStatements(writer, stmt, depth + 1);
+        },
+    }
+}
+
+fn dumpBlockStatements(writer: *Writer, item: []ast.TopItem, depth: usize) !void {
+    try writer.print("BlockStatements\n", .{});
+    for (item) |b| {
+        try writeIndent(writer, depth);
+        try dumpTopItem(writer, b, depth + 1);
     }
 }
 

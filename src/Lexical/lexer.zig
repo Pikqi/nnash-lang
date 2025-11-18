@@ -31,6 +31,7 @@ pub const TokenType = enum {
     //blocks
     IF,
     END_IF,
+    ELSE,
     WHILE,
     ENDWHILE,
     FUN_DEC,
@@ -312,6 +313,7 @@ const keywords = std.static_string_map.StaticStringMap(TokenType).initComptime(&
     .{ "false", TokenType.FALSE_LIT },
     .{ "if", TokenType.IF },
     .{ "fi", TokenType.END_IF },
+    .{ "else", TokenType.ELSE },
 });
 
 test "Lexer simple lexems only" {

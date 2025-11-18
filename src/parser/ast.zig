@@ -27,13 +27,17 @@ pub const TopItem = union(enum) {
 };
 
 pub const SomeBlock = union(enum) {
-    ifBlock: IfBlock,
+    ifBlock: *IfBlock,
     whileBlock: WhileBlock,
     funBlock: FunBlock,
 };
 pub const IfBlock = struct {
     condition: Condition,
     blockStatements: []TopItem,
+    elseBlock: ?union(enum) {
+        elif: *IfBlock,
+        elseStatements: []TopItem,
+    },
 };
 pub const WhileBlock = struct {
     condition: Condition,
